@@ -112,7 +112,67 @@ def rd_output(on: bool):
 
 ## Plan for this repo
 
-1. Start with **stock firmware + USB serial**.
-2. Then try **BT serial** if you want wireless bench use.
-3. For serious automated testing, use MCP over USB serial — or flash only the **WiFi dongle** with `riden-dongle` for SCPI / Modbus TCP.
+1. Start with **stock firmware + USB serial**. ✅ **Done (v0.1)**
+2. Then try **BT serial** if you want wireless bench use. ⏳ **Planned (v0.2)**
+3. For serious automated testing, use MCP over USB serial — or flash only the **WiFi dongle** with `riden-dongle` for SCPI / Modbus TCP. 🔮 **Future**
 4. Do **not** start with UniSoft firmware unless stock firmware blocks something we actually need.
+
+---
+
+## Implementation Status
+
+### v0.1 (Current)
+
+**Transport:** USB serial only (via `pyserial` + ShayBox/Riden library)
+
+**Architecture:**
+- Daemon (`riden_daemon.py`): Owns serial connection; multiplexes clients via Unix socket
+- CLI (`ttu_cli.py`): Human-friendly subcommands (status, set-voltage, etc.)
+- MCP server (`mcp_server.py`): 9 FastMCP tools for Copilot/agents
+- Test harness (`test_harness.py`): 31 unit tests, all passing
+
+**Quick start:**
+```bash
+# Install
+pip install -e .
+
+# Run daemon (requires RD60xx connected to /dev/ttyUSB0)
+python3 riden_daemon.py --port /dev/ttyUSB0 --baud 115200
+
+# In another terminal: query status
+python3 ttu_cli.py status
+
+# Or use MCP with Copilot:
+# - Register .vscode/mcp.json in VS Code settings
+# - Ask Copilot: "What's the current PSU output?"
+```
+
+**Full USB testing guide:** See [USB_TESTING.md](USB_TESTING.md) for all commands and error modes
+
+**Test suite:**
+```bash
+python3 test_harness.py
+# Output: Ran 31 tests in 1.4s — OK
+```
+
+### v0.2 (Planned: BLE Support)
+
+**Goal:** Native Bluetooth Low Energy support for RK6006 devices
+
+**Status:** Discovery in progress (see [BLE_ROADMAP.md](BLE_ROADMAP.md))
+
+**Available hardware:** Two RK6006 devices paired to system
+- `88:BB:52:09:E5:43` (primary)
+- `89:BB:52:09:E5:43` (secondary)
+
+**Blocking:** Need to identify RK6006 BLE GATT service/characteristic UUIDs for Modbus communication
+
+**Path forward:** See [BLE_ROADMAP.md](BLE_ROADMAP.md) for discovery steps, phase breakdown, and integration plan.
+
+### v0.3+ (Future)
+
+- Multi-device support (daemon per device or multiplex via socket)
+- BLE bonding & security
+- Framework extraction → `awto-mcp-python-framework` (reusable across all instruments)
+- Companion repos: `awto-mcp-wit` (WitMotion BLE IMU), `awto-mcp-stlink` (ST-Link flash)
+

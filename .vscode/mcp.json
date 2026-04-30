@@ -1,0 +1,12 @@
+{
+  "servers": {
+    "awto-riden": {
+      "type": "stdio",
+      "command": "${workspaceFolder}/.venv-ft/bin/python",
+      "args": ["${workspaceFolder}/mcp_server.py"],
+      "env": {
+        "AWTO_RIDEN_SOCKET": "/tmp/awto-riden.sock"
+      }
+    }
+  }
+}
