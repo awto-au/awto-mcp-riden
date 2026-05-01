@@ -81,14 +81,14 @@ def plot_waveform_panel(ax, rows, label, color_v="#1f77b4", color_i="#d62728"):
 
 # --- Slow waveforms (1 Hz, 0.5s step) ---
 slow_files = [
-    ("/tmp/wf_sine_1s.jsonl",   "Sine 1 Hz (step 0.5 s)"),
-    ("/tmp/wf_tri_1s.jsonl",    "Triangle 1 Hz (step 0.5 s)"),
-    ("/tmp/wf_sq_1s.jsonl",     "Square 1 Hz (step 0.5 s)"),
+    ("/tmp/wf_sine_slow.jsonl",   "Sine 0.5 Hz (step 0.45 s)"),
+    ("/tmp/wf_tri_slow.jsonl",    "Triangle 0.5 Hz (step 0.5 s)"),
+    ("/tmp/wf_sq_slow.jsonl",     "Square 0.5 Hz (step 0.5 s)"),
 ]
 
 fig, axes = plt.subplots(3, 1, figsize=(13, 12), tight_layout=True)
 fig.suptitle("MR11 LED Lamp — Waveform Response (8–12 V, I_lim 1.5 A)\n"
-             "Slow waveforms: 1 Hz period, 500 ms voltage steps",
+             "Slow waveforms: 0.5 Hz period, 2 s cycle",
              fontsize=11, fontweight="bold")
 for ax, (path, label) in zip(axes, slow_files):
     plot_waveform_panel(ax, load(path), label)
@@ -100,14 +100,14 @@ print(f"Saved: {out_slow}")
 
 # --- Fast waveforms (5 Hz, 0.1s step) ---
 fast_files = [
-    ("/tmp/wf_sine_fast.jsonl", "Sine 5 Hz (step 0.1 s)"),
-    ("/tmp/wf_sq_fast.jsonl",   "Square 5 Hz (step 0.1 s)"),
+    ("/tmp/wf_sine_fast.jsonl", "Sine 2 Hz (step 0.09 s)"),
+    ("/tmp/wf_sq_fast.jsonl",   "Square 2 Hz (step 0.1 s)"),
 ]
 
 fig, axes = plt.subplots(2, 1, figsize=(13, 9), tight_layout=True)
 fig.suptitle("MR11 LED Lamp — Waveform Response (8–12 V, I_lim 1.5 A)\n"
-             "Fast waveforms: 5 Hz period, 100 ms voltage steps\n"
-             "Note: Modbus RTU poll ≈ 100–200 ms → significant lag vs step period visible",
+             "Fast waveforms: 2 Hz period, 500 ms cycle\n"
+             "Note: Modbus RTU poll ≈ 290–440 ms → step lag clearly visible",
              fontsize=11, fontweight="bold")
 for ax, (path, label) in zip(axes, fast_files):
     plot_waveform_panel(ax, load(path), label)

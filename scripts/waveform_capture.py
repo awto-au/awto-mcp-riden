@@ -18,11 +18,11 @@ V_AMP    = 2.0   # 8–12 V
 
 captures = [
     # sine step must NOT be a multiple of 1/(2*freq) to avoid aliasing where sin(nπ)=0
-    ("sine",     1.0, 0.45, 10, "/tmp/wf_sine_1s.jsonl"),
-    ("triangle", 1.0, 0.5,  10, "/tmp/wf_tri_1s.jsonl"),
-    ("square",   1.0, 0.5,  10, "/tmp/wf_sq_1s.jsonl"),
-    ("sine",     5.0, 0.09, 10, "/tmp/wf_sine_fast.jsonl"),
-    ("square",   5.0, 0.1,  10, "/tmp/wf_sq_fast.jsonl"),
+    ("sine",     0.5, 0.45, 20, "/tmp/wf_sine_slow.jsonl"),
+    ("triangle", 0.5, 0.5,  20, "/tmp/wf_tri_slow.jsonl"),
+    ("square",   0.5, 0.5,  20, "/tmp/wf_sq_slow.jsonl"),
+    ("sine",     2.0, 0.09, 10, "/tmp/wf_sine_fast.jsonl"),
+    ("square",   2.0, 0.1,  10, "/tmp/wf_sq_fast.jsonl"),
 ]
 
 tr = SerialTransport(PORT, 115200, 1)
@@ -35,13 +35,14 @@ for shape, freq, step, dur, log_path in captures:
     psu.set_v_set(8.0)
     psu.set_output(True)
     t0 = time.perf_counter()
-    steps_n = int(dur / step)
-    for n in range(steps_n):
-        target = t0 + n * step
-        wait = target - time.perf_counter()
-        if wait > 0:
-            time.sleep(wait)
-        phase = (n * step * freq) % 1.0
+    last_v_set = None
+    while True:
+        now = time.perf_counter()
+        elapsed = now - t0
+        if elapsed >= dur:
+            break
+        # Target voltage based on continuous time (not step-quantised)
+        phase = (elapsed * freq) % 1.0
         if shape == "sine":
             v = V_CENTER + V_AMP * math.sin(2 * math.pi * phase)
         elif shape == "triangle":
@@ -49,7 +50,9 @@ for shape, freq, step, dur, log_path in captures:
         else:  # square
             v = (V_CENTER + V_AMP) if phase < 0.5 else (V_CENTER - V_AMP)
         v = max(8.0, min(12.0, round(v, 2)))
-        psu.set_v_set(v)
+        if v != last_v_set:
+            psu.set_v_set(v)
+            last_v_set = v
         raw   = tr.read(REG_VOUT, REG_CNT)
         v_out = round(psu.get_v_out(raw[0]), 3)
         i_out = round(psu.get_i_out(raw[1]), 4)
