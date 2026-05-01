@@ -68,9 +68,9 @@ for shape, freq, step, dur, log_path in captures:
     print(f"{shape:8s} {freq:4.1f}Hz  -> {len(rows):3d} rows  {log_path}")
     time.sleep(1.5)
 
-# Reset PSU
+# Reset PSU — output OFF, voltage back to safe standby
 psu.set_v_set(12.0)
 psu.set_i_set(1.0)
-psu.set_output(True)
+psu.set_output(False)
 tr.close()
-print("Done — PSU reset to 12V/1A")
+print("Done — PSU reset to 12V/1A, output OFF")
