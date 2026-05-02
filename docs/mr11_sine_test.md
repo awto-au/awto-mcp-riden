@@ -10,7 +10,7 @@ These captures show the MR11 lamp response under commanded waveform output. The 
 
 At-least-1.5-cycle comparison for sine, sawtooth, triangle, and square drive using identical center/amplitude settings. Each panel overlays `V_set`, `V_out`, and `I_out`, marks raw sample points, and annotates maximum voltage overshoot. Cycle boundaries (`phase = 0`) are shown with vertical reference lines.
 
-![MR11 current-limit clipping response](mr11_sine_clipping.png)
+![MR11 current-limit clipping response](mr11_waveform_clipping.png)
 
 Current-limited sine capture showing clip behavior under low current limit. For this run (`I_limit=0.2 A`):
 
@@ -23,7 +23,7 @@ Interpretation:
 - The output is clipping through sustained CC limiting (expected under this limit).
 - No OCP/OVP latch event was observed in this run.
 
-![MR11 current-limit fixed-limit demos](mr11_cc_demo.png)
+![MR11 current-limit fixed-limit demos](mr11_waveform_cc_demo.png)
 
 Dedicated current-limit demos:
 

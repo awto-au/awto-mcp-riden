@@ -236,9 +236,9 @@ def plot_jsonl(path, out_png=None) -> Path:
 
 def main() -> int:
     in_dir = Path("docs")
-    period_png = in_dir / "mr11_waveform_tracking.png"
-    clip_png   = in_dir / "mr11_sine_clipping.png"
-    cc_demo_png = in_dir / "mr11_cc_demo.png"
+    period_png  = in_dir / "mr11_waveform_tracking.png"
+    clip_png    = in_dir / "mr11_waveform_clipping.png"
+    cc_demo_png = in_dir / "mr11_waveform_cc_demo.png"
 
     period_sets = [
         (in_dir / "mr11_sine_period.jsonl", "Sine (period-wide)"),

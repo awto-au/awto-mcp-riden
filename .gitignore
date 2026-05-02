@@ -8,4 +8,8 @@ build/
 .pytest_cache/
 *.jsonl
 *.png
+# Canonical waveform documentation charts (force-tracked despite *.png above)
+!docs/mr11_waveform_tracking.png
+!docs/mr11_waveform_clipping.png
+!docs/mr11_waveform_cc_demo.png
 !docs/*.png
