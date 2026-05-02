@@ -38,76 +38,53 @@ def _period_plot(ax, rows, label, min_cycles=1.5):
         t0 = rows[0]["ts"]
         elapsed = np.array([r["ts"] - t0 for r in rows], dtype=float)
 
-    freq_hz = float(rows[0].get("freq_hz", 0.5))
-    freq_hz = max(freq_hz, 1e-6)
+    freq_hz = max(float(rows[0].get("freq_hz", 0.5)), 1e-6)
     cycles = elapsed * freq_hz
-
     cycles_max = float(np.max(cycles)) if len(cycles) else 0.0
     target_max = min_cycles if cycles_max >= min_cycles else cycles_max
     mask = cycles <= target_max
 
-    x = cycles[mask]
+    x     = cycles[mask]
     v_set = np.array([r.get("v_set", 0.0) for r in rows], dtype=float)[mask]
     v_out = np.array([r.get("v_out", 0.0) for r in rows], dtype=float)[mask]
     i_out = np.array([r.get("i_out", 0.0) for r in rows], dtype=float)[mask]
 
-    # Build smooth traces from sparse samples while keeping raw points visible.
     if len(x) >= 2:
-        x_dense = np.linspace(float(np.min(x)), float(np.max(x)), 320)
-        vs_dense = np.interp(x_dense, x, v_set)
-        vo_dense = np.interp(x_dense, x, v_out)
-        io_dense = np.interp(x_dense, x, i_out)
+        xd = np.linspace(float(x.min()), float(x.max()), 400)
+        vsd = np.interp(xd, x, v_set)
+        vod = np.interp(xd, x, v_out)
+        iod = np.interp(xd, x, i_out)
     else:
-        x_dense = x
-        vs_dense = v_set
-        vo_dense = v_out
-        io_dense = i_out
+        xd, vsd, vod, iod = x, v_set, v_out, i_out
 
-    ax.plot(x_dense, vs_dense, "--", linewidth=1.8, alpha=0.75, color="#4C90C0", label="V_set")
-    ax.plot(x_dense, vo_dense, "-", linewidth=2.2, color="#D06700", label="V_out")
-    ax.scatter(x, v_out, s=12, color="#D06700", alpha=0.6, zorder=3, label="V_out samples")
-    ax.set_xlim(0, max(1.5, float(np.max(x)) if len(x) else 1.5))
-    ax.set_xlabel("Cycle index (phase-0 markers at integers)")
+    ax.plot(xd, vsd, "--", lw=1.6, color="#5588BB", label="V_set")
+    ax.plot(xd, vod, "-",  lw=2.4, color="#E07000", label="V_out")
+    ax.set_xlim(0, max(1.5, float(x.max()) if len(x) else 1.5))
+    ax.set_xlabel("Cycles")
     ax.set_ylabel("Voltage (V)")
-    ax.set_title(label)
-    ax.grid(True, alpha=0.28)
+    ax.set_title(label, fontsize=10)
+    ax.grid(True, alpha=0.22, linestyle=":")
 
-    # Explicitly mark phase 0 for each cycle boundary.
-    max_cycle_line = int(np.ceil(float(np.max(x)) if len(x) else 0.0))
-    for c in range(0, max_cycle_line + 1):
-        ax.axvline(float(c), color="#777777", alpha=0.18, linewidth=1.0)
-
-    if len(x) > 0:
-        ax.scatter([x[0]], [v_out[0]], s=44, color="#B00020", zorder=5, label="sample @ cycle 0")
-
-    v_min = min(float(np.min(v_set)), float(np.min(v_out)))
-    v_max = max(float(np.max(v_set)), float(np.max(v_out)))
-    pad = max(0.25, 0.08 * (v_max - v_min))
+    v_min = min(float(v_set.min()), float(v_out.min()))
+    v_max = max(float(v_set.max()), float(v_out.max()))
+    pad = max(0.3, 0.07 * (v_max - v_min))
     ax.set_ylim(v_min - pad, v_max + pad)
 
     ax2 = ax.twinx()
-    ax2.plot(x_dense, io_dense, "-", linewidth=1.8, alpha=0.9, color="#CC2F2F", label="I_out")
-    ax2.scatter(x, i_out, s=10, color="#CC2F2F", alpha=0.5, zorder=3, label="I_out samples")
-    ax2.set_ylabel("Current (A)", color="#d62728")
-    ax2.tick_params(axis="y", labelcolor="#d62728")
-
-    i_min = float(np.min(i_out))
-    i_max = float(np.max(i_out))
-    i_pad = max(0.02, 0.12 * (i_max - i_min if i_max > i_min else 0.1))
+    ax2.plot(xd, iod, "-", lw=1.8, color="#CC2222", label="I_out")
+    ax2.set_ylabel("Current (A)", color="#CC2222")
+    ax2.tick_params(axis="y", labelcolor="#CC2222")
+    i_min, i_max = float(i_out.min()), float(i_out.max())
+    i_pad = max(0.02, 0.12 * max(i_max - i_min, 0.05))
     ax2.set_ylim(i_min - i_pad, i_max + i_pad)
 
     overshoot = float(np.max(v_out - v_set)) if len(v_out) else 0.0
-    ax.text(
-        0.02,
-        0.92,
-        f"max overshoot: {overshoot:.3f} V | plotted window: {max(1.5, float(np.max(x)) if len(x) else 1.5):.2f} cycles",
-        transform=ax.transAxes,
-        fontsize=8,
-    )
+    ax.text(0.02, 0.05, f"max overshoot: {overshoot:+.3f} V",
+            transform=ax.transAxes, fontsize=8, color="#555")
 
     h1, l1 = ax.get_legend_handles_labels()
     h2, l2 = ax2.get_legend_handles_labels()
-    ax.legend(h1 + h2, l1 + l2, loc="upper right", fontsize=8)
+    ax.legend(h1 + h2, l1 + l2, loc="upper right", fontsize=8, framealpha=0.9)
 
 
 def _clip_plot(ax, rows):
@@ -115,85 +92,46 @@ def _clip_plot(ax, rows):
         ax.set_title("Current-limited sine clipping (no data)")
         return
     t0 = rows[0]["ts"]
-    t = np.array([r["ts"] - t0 for r in rows])
-    v_set = np.array([r.get("v_set", 0.0) for r in rows])
-    v_out = np.array([r.get("v_out", 0.0) for r in rows])
-    i_out = np.array([r.get("i_out", 0.0) for r in rows])
-    cv = np.array([r.get("cv_cc", "CV") for r in rows])
-    prot = np.array([r.get("protect", "none") for r in rows])
+    t     = np.array([r["ts"] - t0            for r in rows], dtype=float)
+    v_set = np.array([r.get("v_set",    0.0)  for r in rows], dtype=float)
+    v_out = np.array([r.get("v_out",    0.0)  for r in rows], dtype=float)
+    i_out = np.array([r.get("i_out",    0.0)  for r in rows], dtype=float)
+    cc    = np.array([r.get("cv_cc",   "CV")  for r in rows])
+    prot  = np.array([r.get("protect", "none") for r in rows])
+    in_cc = cc == "CC"
 
-    ax.plot(t, v_set, "--", linewidth=1.8, alpha=0.75, color="#4C90C0", label="V_set")
-    ax.plot(t, v_out, "-", linewidth=2.2, color="#D06700", label="V_out")
-    ax.scatter(t, v_out, s=12, color="#D06700", alpha=0.6, zorder=3, label="V_out samples")
+    # V_set dashed, V_out solid; CC portion overdrawn in red.
+    ax.plot(t, v_set, "--", lw=1.5, color="#5588BB", label="V_set")
+    ax.plot(t, np.where(~in_cc, v_out, np.nan), "-", lw=2.2, color="#E07000", label="V_out (CV)")
+    ax.plot(t, np.where( in_cc, v_out, np.nan), "-", lw=2.5, color="#CC2222", label="V_out (CC)")
+
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Voltage (V)")
-    ax.grid(True, alpha=0.28)
-    ax.set_title("Sine under current limiting (clipping / CC transitions)")
+    ax.grid(True, alpha=0.22, linestyle=":")
+    ax.set_title("Sine under current limiting — CV=orange, CC=red")
 
-    v_min = min(float(np.min(v_set)), float(np.min(v_out)))
-    v_max = max(float(np.max(v_set)), float(np.max(v_out)))
+    v_min = min(float(v_set.min()), float(v_out.min()))
+    v_max = max(float(v_set.max()), float(v_out.max()))
     pad = max(0.25, 0.08 * (v_max - v_min))
     ax.set_ylim(v_min - pad, v_max + pad)
 
     ax2 = ax.twinx()
-    ax2.plot(t, i_out, "-", linewidth=1.8, alpha=0.9, color="#CC2F2F", label="I_out")
-    ax2.scatter(t, i_out, s=10, color="#CC2F2F", alpha=0.5, zorder=3, label="I_out samples")
-    ax2.set_ylabel("Current (A)", color="#d62728")
-    ax2.tick_params(axis="y", labelcolor="#d62728")
+    ax2.plot(t, np.where(~in_cc, i_out, np.nan), "-", lw=1.8, color="#E07000", label="I_out (CV)")
+    ax2.plot(t, np.where( in_cc, i_out, np.nan), "-", lw=2.2, color="#CC2222", label="I_out (CC)")
+    ax2.set_ylabel("Current (A)", color="#CC2222")
+    ax2.tick_params(axis="y", labelcolor="#CC2222")
+    i_min, i_max = float(i_out.min()), float(i_out.max())
+    ax2.set_ylim(i_min - max(0.01, 0.12*max(i_max-i_min,0.05)),
+                 i_max + max(0.01, 0.12*max(i_max-i_min,0.05)))
 
-    i_min = float(np.min(i_out))
-    i_max = float(np.max(i_out))
-    i_pad = max(0.01, 0.12 * (i_max - i_min if i_max > i_min else 0.05))
-    ax2.set_ylim(i_min - i_pad, i_max + i_pad)
-
-    in_cc = cv == "CC"
-    if np.any(in_cc):
-        start = None
-        for idx, is_cc in enumerate(in_cc):
-            if is_cc and start is None:
-                start = t[idx]
-            if (not is_cc) and start is not None:
-                ax.axvspan(start, t[idx], color="orange", alpha=0.15)
-                start = None
-        if start is not None:
-            ax.axvspan(start, t[-1], color="orange", alpha=0.15)
-
-    oc_idx = np.where(prot != "none")[0]
-    if len(oc_idx) > 0:
-        ax.scatter(t[oc_idx], v_out[oc_idx], color="black", s=14, label="protect != none")
-    ax.text(
-        0.02,
-        0.92,
-        f"CC samples: {int(np.sum(in_cc))} / {len(rows)} | protect events: {len(oc_idx)}",
-        transform=ax.transAxes,
-        fontsize=8,
-    )
+    n_oc = int(np.sum(prot != "none"))
+    ax.text(0.02, 0.05,
+            f"CC samples: {int(np.sum(in_cc))}/{len(rows)}  |  OCP events: {n_oc}",
+            transform=ax.transAxes, fontsize=8, color="#555")
 
     h1, l1 = ax.get_legend_handles_labels()
     h2, l2 = ax2.get_legend_handles_labels()
-    ax.legend(h1 + h2, l1 + l2, loc="upper right", fontsize=8)
-
-
-def _plot_series_with_cc(ax, x, y, cc_mask, base_label, base_color, cc_color):
-    if len(x) == 0:
-        return
-    y_base = np.where(cc_mask, np.nan, y)
-    y_cc = np.where(cc_mask, y, np.nan)
-    ax.plot(x, y_base, "-", linewidth=2.0, color=base_color, label=base_label)
-    ax.plot(x, y_cc, "-", linewidth=2.4, color=cc_color, label=f"{base_label} (CC)")
-
-
-def _mark_missed_intervals(ax, x):
-    if len(x) < 4:
-        return 0
-    dt = np.diff(x)
-    med = float(np.median(dt)) if len(dt) else 0.0
-    if med <= 0:
-        return 0
-    bad = np.where(dt > (2.2 * med))[0]
-    for i in bad:
-        ax.axvspan(x[i], x[i + 1], color="#b00020", alpha=0.15)
-    return int(len(bad))
+    ax.legend(h1 + h2, l1 + l2, loc="upper right", fontsize=8, framealpha=0.9)
 
 
 def _cc_demo_plot(ax, rows, title):
@@ -201,51 +139,45 @@ def _cc_demo_plot(ax, rows, title):
         ax.set_title(f"{title} (no data)")
         return
 
-    t0 = rows[0]["ts"]
-    t = np.array([r["ts"] - t0 for r in rows])
-    v_set = np.array([r.get("v_set", 0.0) for r in rows])
-    v_out = np.array([r.get("v_out", 0.0) for r in rows])
-    i_out = np.array([r.get("i_out", 0.0) for r in rows])
-    cv = np.array([r.get("cv_cc", "CV") for r in rows])
-    cc_mask = cv == "CC"
+    t0    = rows[0]["ts"]
+    t     = np.array([r["ts"] - t0            for r in rows], dtype=float)
+    v_set = np.array([r.get("v_set",    0.0)  for r in rows], dtype=float)
+    v_out = np.array([r.get("v_out",    0.0)  for r in rows], dtype=float)
+    i_out = np.array([r.get("i_out",    0.0)  for r in rows], dtype=float)
+    cc    = np.array([r.get("cv_cc",   "CV")  for r in rows])
+    in_cc = cc == "CC"
 
-    missed = _mark_missed_intervals(ax, t)
+    # V_set dashed reference; V_out CV=orange, CC=red.
+    ax.plot(t, v_set, "--", lw=1.5, color="#5588BB", label="V_set")
+    ax.plot(t, np.where(~in_cc, v_out, np.nan), "-", lw=2.2, color="#E07000", label="V_out (CV)")
+    ax.plot(t, np.where( in_cc, v_out, np.nan), "-", lw=2.5, color="#CC2222", label="V_out (CC)")
 
-    ax.plot(t, v_set, "--", linewidth=1.8, alpha=0.8, color="#4C90C0", label="V_set")
-    _plot_series_with_cc(ax, t, v_out, cc_mask, "V_out", "#D06700", "#B00020")
-    ax.scatter(t, v_out, s=11, color="#D06700", alpha=0.45, zorder=3, label="V_out samples")
-
-    ax2 = ax.twinx()
-    _plot_series_with_cc(ax2, t, i_out, cc_mask, "I_out", "#2D7F5E", "#B00020")
-    ax2.scatter(t, i_out, s=9, color="#2D7F5E", alpha=0.45, zorder=3, label="I_out samples")
-
-    ax.set_title(title)
+    ax.set_title(title, fontsize=10)
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Voltage (V)")
-    ax2.set_ylabel("Current (A)")
-    ax.grid(True, alpha=0.28)
+    ax.grid(True, alpha=0.22, linestyle=":")
 
-    v_min = min(float(np.min(v_set)), float(np.min(v_out)))
-    v_max = max(float(np.max(v_set)), float(np.max(v_out)))
-    v_pad = max(0.25, 0.08 * (v_max - v_min if v_max > v_min else 1.0))
+    v_min = min(float(v_set.min()), float(v_out.min()))
+    v_max = max(float(v_set.max()), float(v_out.max()))
+    v_pad = max(0.3, 0.07 * max(v_max - v_min, 0.5))
     ax.set_ylim(v_min - v_pad, v_max + v_pad)
 
-    i_min = float(np.min(i_out))
-    i_max = float(np.max(i_out))
-    i_pad = max(0.01, 0.12 * (i_max - i_min if i_max > i_min else 0.05))
+    ax2 = ax.twinx()
+    ax2.plot(t, np.where(~in_cc, i_out, np.nan), "-", lw=1.8, color="#E07000", label="I_out (CV)")
+    ax2.plot(t, np.where( in_cc, i_out, np.nan), "-", lw=2.2, color="#CC2222", label="I_out (CC)")
+    ax2.set_ylabel("Current (A)", color="#CC2222")
+    ax2.tick_params(axis="y", labelcolor="#CC2222")
+    i_min, i_max = float(i_out.min()), float(i_out.max())
+    i_pad = max(0.01, 0.12 * max(i_max - i_min, 0.05))
     ax2.set_ylim(i_min - i_pad, i_max + i_pad)
 
-    ax.text(
-        0.02,
-        0.92,
-        f"CC samples: {int(np.sum(cc_mask))}/{len(rows)} | missed intervals: {missed}",
-        transform=ax.transAxes,
-        fontsize=8,
-    )
+    ax.text(0.02, 0.05,
+            f"CC samples: {int(np.sum(in_cc))}/{len(rows)}",
+            transform=ax.transAxes, fontsize=8, color="#555")
 
     h1, l1 = ax.get_legend_handles_labels()
     h2, l2 = ax2.get_legend_handles_labels()
-    ax.legend(h1 + h2, l1 + l2, loc="upper right", fontsize=8)
+    ax.legend(h1 + h2, l1 + l2, loc="upper right", fontsize=8, framealpha=0.9)
 
 
 def main() -> int:
