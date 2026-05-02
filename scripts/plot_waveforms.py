@@ -180,18 +180,56 @@ def _cc_demo_plot(ax, rows, title):
     ax.legend(h1 + h2, l1 + l2, loc="upper right", fontsize=8, framealpha=0.9)
 
 
-_CC_FRACTION_CLIP_THRESHOLD = 0.10  # >= 10 % CC samples → use clip-style plot
+_CC_FRACTION_CLIP_THRESHOLD = 0.10  # >= 10 % CC samples → used when i_limit is low
+_I_LIMIT_PERIOD_THRESHOLD_A = 0.9   # i_limit >= this → treat as period-tracking (not clip)
 
 
 def _detect_plot_type(rows: list) -> str:
-    """Return 'period', 'clip', or 'cc_demo' based on JSONL content."""
+    """Return 'period', 'clip', or 'cc_demo' based on JSONL content.
+
+    Primary discriminator is i_limit_a:
+    - shape == 'dc'              → cc_demo  (fixed-voltage CC demo)
+    - i_limit_a >= 0.9 A         → period   (high limit = waveform tracking intent)
+    - i_limit_a <  0.9 A, any CC → clip     (low limit = deliberate current-limiting)
+    - i_limit_a <  0.9 A, no CC  → period   (low limit but no clipping observed)
+    """
     if not rows:
         return "cc_demo"
-    shape = rows[0].get("shape", "dc")
+    shape   = rows[0].get("shape", "dc")
     if shape == "dc":
         return "cc_demo"
+    i_limit = float(rows[0].get("i_limit_a", 1.0))
+    if i_limit >= _I_LIMIT_PERIOD_THRESHOLD_A:
+        return "period"
     cc_frac = sum(1 for r in rows if r.get("cv_cc") == "CC") / len(rows)
     return "clip" if cc_frac >= _CC_FRACTION_CLIP_THRESHOLD else "period"
+
+
+def _descriptive_png_name(rows: list, src_dir: Path) -> Path:
+    """Derive a descriptive PNG filename from JSONL row content.
+
+    Pattern
+    -------
+    period  : waveform_period_{shape}_{freq_str}.png
+    clip    : waveform_clip_{shape}_{freq_str}_i{ma}ma.png
+    cc_demo : waveform_cc_demo_{shape}_i{ma}ma.png
+    """
+    if not rows:
+        return src_dir / "waveform_unknown.png"
+    r0 = rows[0]
+    shape = r0.get("shape", "dc")
+    freq  = float(r0.get("freq_hz", 0.0))
+    i_ma  = round(float(r0.get("i_limit_a", 0.0)) * 1000)
+    # e.g. 0.5 → "0p5hz", 1.0 → "1p0hz"
+    freq_str = f"{freq:.1f}hz".replace(".", "p")
+    kind = _detect_plot_type(rows)
+    if kind == "period":
+        name = f"waveform_period_{shape}_{freq_str}.png"
+    elif kind == "clip":
+        name = f"waveform_clip_{shape}_{freq_str}_i{i_ma}ma.png"
+    else:
+        name = f"waveform_cc_demo_{shape}_i{i_ma}ma.png"
+    return src_dir / name
 
 
 def plot_jsonl(path, out_png=None) -> Path:
@@ -203,6 +241,9 @@ def plot_jsonl(path, out_png=None) -> Path:
     - waveform shape, CC fraction >= 10 %        → clipping / CC transition plot
     - waveform shape, CC fraction <  10 %        → 1.5-cycle period-tracking plot
 
+    If out_png is not given the filename is derived from the JSONL content
+    (shape, freq_hz, i_limit_a) so it is always descriptive.
+
     Returns the Path of the written PNG.
     """
     path = Path(path)
@@ -211,7 +252,7 @@ def plot_jsonl(path, out_png=None) -> Path:
     shape = rows[0].get("shape", "dc") if rows else "dc"
 
     if out_png is None:
-        out_png = path.with_suffix(".png")
+        out_png = _descriptive_png_name(rows, path.parent)
     out_png = Path(out_png)
 
     if kind == "period":
