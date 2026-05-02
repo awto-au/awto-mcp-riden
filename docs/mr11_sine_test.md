@@ -6,9 +6,9 @@ Connected-load waveform behavior and timing accuracy notes for Riden PSU tests.
 
 These captures show the MR11 lamp response under commanded waveform output. The key behavior is that measured output tracking is limited by poll/update timing, not wire baud alone.
 
-![MR11 period-wide waveform response](mr11_waveform_tracking_one_period_view_same_settings_overshoot_visible.png)
+![MR11 period-wide waveform response](mr11_waveform_tracking_at_least_1p5_cycle_view_same_settings_overshoot_visible.png)
 
-Period-wide comparison for sine, sawtooth, triangle, and square drive using identical center/amplitude settings. Each panel overlays `V_set`, `V_out`, and `I_out`, and annotates maximum voltage overshoot.
+At-least-1.5-cycle comparison for sine, sawtooth, triangle, and square drive using identical center/amplitude settings. Each panel overlays `V_set`, `V_out`, and `I_out`, marks raw sample points, and annotates maximum voltage overshoot. Cycle boundaries (`phase = 0`) are shown with vertical reference lines.
 
 ![MR11 current-limit clipping response](mr11_sine_under_current_limiting_clipping_cc_transitions.png)
 
@@ -22,6 +22,15 @@ Interpretation:
 
 - The output is clipping through sustained CC limiting (expected under this limit).
 - No OCP/OVP latch event was observed in this run.
+
+![MR11 current-limit fixed-limit demos](mr11_current_limit_demo_i200ma_sine_0_12v_and_i300ma_fixed_12v.png)
+
+Dedicated current-limit demos:
+
+- Top panel: fixed current limit `200 mA`, voltage command follows sine across `0..12 V`.
+- Bottom panel: fixed voltage command `12 V`, fixed current limit `300 mA`.
+- Red trace segments indicate points where current limiting (CC) is active.
+- Light red background spans indicate potential missed-sample intervals (`delta_t > 2.2x median`).
 
 ## MR11 Fastest vs Safe vs Comprehensive (rerun)
 

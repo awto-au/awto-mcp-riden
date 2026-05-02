@@ -35,6 +35,8 @@ def _wave_v(shape: str, phase: float, v_center: float, v_amp: float) -> float:
         return v_center + v_amp * (4 * abs(phase - 0.5) - 1)
     if shape == "sawtooth":
         return v_center + v_amp * (2 * phase - 1)
+    if shape == "dc":
+        return v_center
     # square
     return (v_center + v_amp) if phase < 0.5 else (v_center - v_amp)
 
@@ -104,6 +106,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--v-amp", type=float, default=2.0)
     p.add_argument("--i-limit-normal", type=float, default=1.5)
     p.add_argument("--i-limit-clipped", type=float, default=0.2)
+    p.add_argument("--cc-demo-duration-s", type=float, default=8.0)
+    p.add_argument("--cc-demo-freq-hz", type=float, default=0.5)
+    p.add_argument("--cc-demo-fixed-v", type=float, default=12.0)
+    p.add_argument("--cc-demo-sine-i-limit", type=float, default=0.2)
+    p.add_argument("--cc-demo-fixed-i-limit", type=float, default=0.3)
     return p.parse_args()
 
 
@@ -150,6 +157,36 @@ def main() -> int:
             path=clip_path,
         )
         print(f"sine clip  capture -> {n:3d} rows {clip_path}")
+
+        # Dedicated current-limit demos requested for documentation.
+        cc_sine_path = out_dir / "mr11_current_limit_demo_sine_0_12v_i200ma.jsonl"
+        n = _capture_case(
+            psu,
+            tr,
+            shape="sine",
+            freq_hz=args.cc_demo_freq_hz,
+            duration_s=args.cc_demo_duration_s,
+            v_center=6.0,
+            v_amp=6.0,
+            i_limit_a=args.cc_demo_sine_i_limit,
+            path=cc_sine_path,
+        )
+        print(f"cc demo sine capture -> {n:3d} rows {cc_sine_path}")
+        time.sleep(1.0)
+
+        cc_fixed_path = out_dir / "mr11_current_limit_demo_fixed_12v_i300ma.jsonl"
+        n = _capture_case(
+            psu,
+            tr,
+            shape="dc",
+            freq_hz=max(args.cc_demo_freq_hz, 1e-6),
+            duration_s=args.cc_demo_duration_s,
+            v_center=args.cc_demo_fixed_v,
+            v_amp=0.0,
+            i_limit_a=args.cc_demo_fixed_i_limit,
+            path=cc_fixed_path,
+        )
+        print(f"cc demo fixed capture-> {n:3d} rows {cc_fixed_path}")
 
         # Safe reset
         psu.set_v_set(12.0)
