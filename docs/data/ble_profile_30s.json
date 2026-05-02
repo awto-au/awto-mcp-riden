@@ -1,0 +1,62 @@
+{
+  "recommended_poll_ms": 160,
+  "strategy": "stable-cadence",
+  "raw_recommended_poll_ms": 140.46,
+  "quantization_ms": 20,
+  "transport": "ble-uart",
+  "mac": "88:BB:52:09:E5:43",
+  "wire_theory_ms": null,
+  "register_read": {
+    "start": 10,
+    "count": 9
+  },
+  "timing": {
+    "count": 30,
+    "sleep_ms": 150,
+    "ok": 30,
+    "min_ms": 111.65,
+    "median_ms": 119.79,
+    "p90_ms": 126.87,
+    "p95_ms": 127.69,
+    "max_ms": 127.74,
+    "mean_ms": 121.89,
+    "jitter_p95_minus_p50_ms": 7.89
+  },
+  "raw_rtt_ms": [
+    119.87,
+    126.62,
+    118.73,
+    119.49,
+    127.69,
+    119.54,
+    119.67,
+    125.79,
+    119.89,
+    126.61,
+    119.87,
+    118.75,
+    126.68,
+    118.56,
+    126.76,
+    119.73,
+    119.69,
+    126.69,
+    118.73,
+    127.72,
+    119.74,
+    119.8,
+    126.87,
+    127.74,
+    111.65,
+    126.82,
+    119.79,
+    118.75,
+    118.85,
+    119.62
+  ],
+  "notes": [
+    "BLE RTT dominated by connection interval (typically 30-100 ms) + notify latency.",
+    "write_gatt_char uses write-without-response; notify carries the reply.",
+    "USB-serial reference: median~137ms, p95~138ms, recommended_poll=160ms."
+  ]
+}

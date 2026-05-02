@@ -242,12 +242,11 @@ class RidenWorker:
     daemon thread and also acquires _lock for each poll.
     """
 
-    def __init__(self, port: str, baud: int, address: int, name: str = "default", use_raw_serial: bool = False) -> None:
+    def __init__(self, port: str, baud: int, address: int, name: str = "default") -> None:
         self.name     = name
         self._port    = port
         self._baud    = baud
         self._address = address
-        self._prefer_raw_serial = use_raw_serial
         self._psu: RidenDevice | None = None
         self._lock    = threading.Lock()
 
@@ -304,26 +303,8 @@ class RidenWorker:
                 self._port,
                 self._baud,
                 self._address,
-                use_raw_serial=self._prefer_raw_serial,
             )
-            try:
-                transport.open()
-            except IOError as first_exc:
-                fallback_raw = not self._prefer_raw_serial
-                fallback = SerialTransport(
-                    self._port,
-                    self._baud,
-                    self._address,
-                    use_raw_serial=fallback_raw,
-                )
-                log.warning(
-                    "open failed with %s transport (%s), retrying with %s",
-                    "raw_serial" if self._prefer_raw_serial else "pymodbus",
-                    first_exc,
-                    "raw_serial" if fallback_raw else "pymodbus",
-                )
-                fallback.open()
-                transport = fallback
+            transport.open()
             try:
                 self._psu = RidenDevice(transport)
                 self._serial_profile = None
@@ -1521,13 +1502,8 @@ class RidenWorker:
             ("ovp_ocp_regs", 82, 2),
         ]
 
-        tr = SerialTransport(self._port, self._baud, self._address, use_raw_serial=True)
-        try:
-            tr.open()
-        except IOError:
-            # If raw serial fails, try pymodbus
-            tr._use_raw_serial = False
-            tr.open()
+        tr = SerialTransport(self._port, self._baud, self._address)
+        tr.open()
         
         try:
             def _summary(times_ms: list[float], reg_start: int, reg_count: int) -> dict[str, Any]:
@@ -1587,7 +1563,7 @@ class RidenWorker:
             tr.close()
 
         out = {
-            "transport":    "raw_serial" if tr._use_raw_serial else "pymodbus",
+            "transport":    "raw_serial",
             "port":         self._port,
             "baud":         self._baud,
             "usb_topology": self._usb_topology_info(),

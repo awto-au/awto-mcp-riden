@@ -1,10 +1,10 @@
 # riden_transport.py — transport abstraction for Riden RD60xx / RK60xx PSUs.
 #
 # Provides a hardware-independent Modbus RTU interface so riden_daemon.py
-# does not depend on any Modbus library at runtime beyond pymodbus + pyserial.
+# does not depend on any Modbus library at runtime beyond pyserial.
 #
 # Implemented:
-#   SerialTransport  — USB serial / BT serial via pymodbus + pyserial
+#   SerialTransport  — USB serial / BT serial via raw Modbus RTU (pyserial only)
 #
 # Stubs (not yet implemented):
 #   TcpTransport     — Modbus TCP or pyserial socket:// URL (WiFi bridge)
@@ -20,10 +20,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 import struct
 import time
-from pathlib import Path
 
-from pymodbus.client import ModbusSerialClient
-from pymodbus.exceptions import ModbusException
 from serial import Serial
 
 
@@ -96,7 +93,9 @@ class RidenTransport(ABC):
 class SerialTransport(RidenTransport):
     """Modbus RTU over a serial port (USB or BT RFCOMM).
 
-    Uses pymodbus ModbusSerialClient (actively maintained, Python 3.10-3.14).
+    Uses raw pyserial with hand-built Modbus RTU frames (FC03/FC06/FC16).
+    Avoids pymodbus transaction management overhead — no library framer,
+    no transaction state machine.
     Raises TimeoutError after exhausting retries instead of recursing forever
     on flaky links.
 
@@ -115,49 +114,19 @@ class SerialTransport(RidenTransport):
         address: int = 1,
         retries: int = 3,
         timeout: float = 0.5,
-        use_raw_serial: bool = False,
     ) -> None:
         self._port    = port
         self._baud    = baud
         self._address = address
         self._retries = retries
         self._timeout = timeout
-        self._use_raw_serial = use_raw_serial
-        self._client: ModbusSerialClient | None = None
         self._serial: Serial | None = None
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _is_ch341(port: str) -> bool:
-        """Return True if port is backed by a CH341 USB serial chip (VID 1a86)."""
-        try:
-            # Resolve the sysfs path from the tty device name.
-            devname = Path(port).name  # e.g. ttyUSB0
-            sysfs = Path(f"/sys/bus/usb-serial/devices/{devname}")
-            if not sysfs.exists():
-                return False
-            # Walk up to find the USB device directory with idVendor.
-            usb_dev = sysfs.resolve().parents[2]  # .../1-7.4:1.0 -> .../1-7.4
-            vendor_file = usb_dev / "idVendor"
-            if vendor_file.exists():
-                return vendor_file.read_text().strip().lower() == "1a86"
-        except Exception:
-            pass
-        return False
-
     def open(self) -> None:
-        # Auto-prefer raw serial for CH341 chips — they don't support TIOCEXCL
-        # and pymodbus will always fail with EAGAIN before we can even connect.
-        if self._use_raw_serial or self._is_ch341(self._port):
-            self._open_raw_serial()
-        else:
-            self._open_pymodbus()
-    
-    def _open_raw_serial(self) -> None:
-        """Open raw serial connection (for ch341 adapters without exclusive lock support)."""
         try:
             self._serial = Serial(
                 self._port,
@@ -167,52 +136,15 @@ class SerialTransport(RidenTransport):
                 stopbits=1,
                 timeout=self._timeout,
             )
-            # CH341 sends a spurious line-status frame on open; flush it.
+            # Flush any spurious bytes that arrive on open (e.g. CH34x
+            # line-status frames on first open).
             time.sleep(0.05)
             self._serial.reset_input_buffer()
             self._serial.reset_output_buffer()
         except Exception as e:
-            raise IOError(f"failed to open raw serial {self._port}: {e}")
-    
-    def _open_pymodbus(self) -> None:
-        """Open pymodbus connection, fall back to raw serial on exclusive lock error."""
-        try:
-            self._client = ModbusSerialClient(
-                port=self._port,
-                baudrate=self._baud,
-                bytesize=8,
-                parity="N",
-                stopbits=1,
-                timeout=self._timeout,
-                retries=self._retries,
-            )
-            if not self._client.connect():
-                raise IOError(f"pymodbus failed to connect to {self._port}")
-        except Exception as e:
-            # Ch341 USB adapters may not support exclusive locking — fall back to raw serial
-            error_msg = str(e).lower()
-            # Check exception chain as well
-            exc_chain = []
-            curr = e
-            while curr:
-                exc_chain.append(str(curr).lower())
-                curr = getattr(curr, '__cause__', None)
-            all_msgs = " | ".join(exc_chain)
-            
-            if ("exclusive" in all_msgs or "errno 11" in all_msgs or 
-                "resource temporarily unavailable" in all_msgs):
-                self._client = None
-                self._open_raw_serial()
-            else:
-                raise IOError(f"failed to connect to {self._port}: {e}")
+            raise IOError(f"failed to open {self._port}: {e}")
 
     def close(self) -> None:
-        if self._client is not None:
-            try:
-                self._client.close()
-            except Exception:
-                pass
-            self._client = None
         if self._serial is not None:
             try:
                 self._serial.close()
@@ -243,36 +175,13 @@ class SerialTransport(RidenTransport):
     # a settled measurement.
 
     def read(self, register: int, count: int = 1) -> tuple[int, ...]:
-        if self._client is not None:
-            return self._read_pymodbus(register, count)
-        elif self._serial is not None:
-            return self._read_raw_serial(register, count)
-        else:
+        if self._serial is None:
             raise IOError("transport not open")
-    
-    def _read_pymodbus(self, register: int, count: int) -> tuple[int, ...]:
-        last_exc: Exception | None = None
-        for _ in range(self._retries):
-            try:
-                resp = self._client.read_holding_registers(
-                    address=register, count=count, device_id=self._address
-                )
-                if resp.isError():
-                    raise ModbusException(f"read error at reg={register}: {resp}")
-                return tuple(resp.registers)
-            except Exception as exc:
-                last_exc = exc
-        raise TimeoutError(
-            f"modbus read reg={register} count={count} failed after {self._retries} retries"
-        ) from last_exc
-    
-    def _read_raw_serial(self, register: int, count: int) -> tuple[int, ...]:
-        """Raw Modbus RTU FC03 read (handles ch341 exclusive lock issue)."""
         last_exc: Exception | None = None
         for attempt in range(self._retries):
             try:
-                # Flush any stale bytes before each attempt (CH341 can leave
-                # line-status bytes in the buffer between transactions).
+                # Flush stale bytes before each attempt — handles CH34x
+                # line-status frames and any residual data on the bus.
                 self._serial.reset_input_buffer()
                 request = self._build_fc03_request(register, count)
                 self._serial.write(request)
@@ -286,10 +195,9 @@ class SerialTransport(RidenTransport):
                 return tuple(regs)
             except Exception as exc:
                 last_exc = exc
-                # Brief pause before retry so CH341 settles.
                 time.sleep(0.02)
         raise TimeoutError(
-            f"raw serial read reg={register} count={count} failed after {self._retries} retries"
+            f"serial read reg={register} count={count} failed after {self._retries} retries"
         ) from last_exc
 
     @staticmethod
@@ -328,95 +236,62 @@ class SerialTransport(RidenTransport):
         return regs
 
     def write(self, register: int, value: int) -> None:
-        if self._client is not None:
-            last_exc: Exception | None = None
-            for _ in range(self._retries):
-                try:
-                    resp = self._client.write_register(
-                        address=register, value=value, device_id=self._address
-                    )
-                    if resp.isError():
-                        raise ModbusException(f"write error at reg={register}: {resp}")
-                    return
-                except Exception as exc:
-                    last_exc = exc
-            raise TimeoutError(
-                f"modbus write reg={register} value={value} failed after {self._retries} retries"
-            ) from last_exc
-
-        if self._serial is not None:
-            last_exc: Exception | None = None
-            for _ in range(self._retries):
-                try:
-                    pdu = struct.pack(">BBHH", self._address, 0x06, register, value)
-                    req = pdu + struct.pack("<H", self._crc16(pdu))
-                    self._serial.write(req)
-                    resp = self._serial.read(8)
-                    if len(resp) != 8:
-                        raise IOError(f"short FC06 response: {len(resp)} bytes")
-                    if self._crc16(resp[:-2]) != struct.unpack("<H", resp[-2:])[0]:
-                        raise IOError("FC06 response CRC mismatch")
-                    if resp[:6] != req[:6]:
-                        raise IOError("FC06 echo mismatch")
-                    return
-                except Exception as exc:
-                    last_exc = exc
-            raise TimeoutError(
-                f"raw serial write reg={register} value={value} failed after {self._retries} retries"
-            ) from last_exc
-
-        raise IOError("transport not open")
+        if self._serial is None:
+            raise IOError("transport not open")
+        last_exc: Exception | None = None
+        for _ in range(self._retries):
+            try:
+                self._serial.reset_input_buffer()
+                pdu = struct.pack(">BBHH", self._address, 0x06, register, value)
+                req = pdu + struct.pack("<H", self._crc16(pdu))
+                self._serial.write(req)
+                resp = self._serial.read(8)
+                if len(resp) != 8:
+                    raise IOError(f"short FC06 response: {len(resp)} bytes")
+                if self._crc16(resp[:-2]) != struct.unpack("<H", resp[-2:])[0]:
+                    raise IOError("FC06 response CRC mismatch")
+                if resp[:6] != req[:6]:
+                    raise IOError("FC06 echo mismatch")
+                return
+            except Exception as exc:
+                last_exc = exc
+        raise TimeoutError(
+            f"serial write reg={register} value={value} failed after {self._retries} retries"
+        ) from last_exc
 
     def write_multiple(self, register: int, values: tuple | list) -> None:
-        if self._client is not None:
-            last_exc: Exception | None = None
-            for _ in range(self._retries):
-                try:
-                    resp = self._client.write_registers(
-                        address=register, values=list(values), device_id=self._address
-                    )
-                    if resp.isError():
-                        raise ModbusException(f"write_multiple error at reg={register}: {resp}")
-                    return
-                except Exception as exc:
-                    last_exc = exc
-            raise TimeoutError(
-                f"modbus write_multiple reg={register} count={len(values)} failed after {self._retries} retries"
-            ) from last_exc
-
-        if self._serial is not None:
-            vals = list(values)
-            if not vals:
+        if self._serial is None:
+            raise IOError("transport not open")
+        vals = list(values)
+        if not vals:
+            return
+        if len(vals) == 1:
+            self.write(register, int(vals[0]))
+            return
+        qty = len(vals)
+        byte_count = qty * 2
+        payload = struct.pack(">BBHHB", self._address, 0x10, register, qty, byte_count)
+        payload += b"".join(struct.pack(">H", int(v) & 0xFFFF) for v in vals)
+        req = payload + struct.pack("<H", self._crc16(payload))
+        last_exc: Exception | None = None
+        for _ in range(self._retries):
+            try:
+                self._serial.reset_input_buffer()
+                self._serial.write(req)
+                resp = self._serial.read(8)
+                if len(resp) != 8:
+                    raise IOError(f"short FC16 response: {len(resp)} bytes")
+                if self._crc16(resp[:-2]) != struct.unpack("<H", resp[-2:])[0]:
+                    raise IOError("FC16 response CRC mismatch")
+                addr, fn, start, echoed_qty = struct.unpack(">BBHH", resp[:6])
+                if addr != self._address or fn != 0x10 or start != register or echoed_qty != qty:
+                    raise IOError("FC16 response mismatch")
                 return
-            if len(vals) == 1:
-                self.write(register, int(vals[0]))
-                return
-
-            last_exc: Exception | None = None
-            qty = len(vals)
-            byte_count = qty * 2
-            payload = struct.pack(">BBHHB", self._address, 0x10, register, qty, byte_count)
-            payload += b"".join(struct.pack(">H", int(v) & 0xFFFF) for v in vals)
-            req = payload + struct.pack("<H", self._crc16(payload))
-            for _ in range(self._retries):
-                try:
-                    self._serial.write(req)
-                    resp = self._serial.read(8)
-                    if len(resp) != 8:
-                        raise IOError(f"short FC16 response: {len(resp)} bytes")
-                    if self._crc16(resp[:-2]) != struct.unpack("<H", resp[-2:])[0]:
-                        raise IOError("FC16 response CRC mismatch")
-                    addr, fn, start, echoed_qty = struct.unpack(">BBHH", resp[:6])
-                    if addr != self._address or fn != 0x10 or start != register or echoed_qty != qty:
-                        raise IOError("FC16 response mismatch")
-                    return
-                except Exception as exc:
-                    last_exc = exc
-            raise TimeoutError(
-                f"raw serial write_multiple reg={register} count={len(vals)} failed after {self._retries} retries"
-            ) from last_exc
-
-        raise IOError("transport not open")
+            except Exception as exc:
+                last_exc = exc
+        raise TimeoutError(
+            f"serial write_multiple reg={register} count={len(vals)} failed after {self._retries} retries"
+        ) from last_exc
 
 
 # ---------------------------------------------------------------------------

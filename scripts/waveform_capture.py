@@ -123,8 +123,6 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--cc-demo-fixed-v", type=float, default=12.0)
     p.add_argument("--cc-demo-sine-i-limit", type=float, default=0.2)
     p.add_argument("--cc-demo-fixed-i-limit", type=float, default=0.3)
-    p.add_argument("--use-raw", action="store_true",
-                   help="Use raw serial instead of pymodbus (avoids USB lock conflicts)")
     p.add_argument("--transport-timeout", type=float, default=0.25,
                    help="Transport read timeout in seconds (default: 0.25)")
     p.add_argument("--transport-retries", type=int, default=2,
@@ -235,7 +233,6 @@ def main() -> int:
         args.address,
         retries=args.transport_retries,
         timeout=args.transport_timeout,
-        use_raw_serial=args.use_raw,
     )
     tr.open()
     psu = RidenDevice(tr)

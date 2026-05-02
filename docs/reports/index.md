@@ -4,6 +4,7 @@ Updated: 2026-05-02 03:56:50 UTC
 
 | Date (UTC) | Kind | Device | FW | Port | Report |
 |---|---|---|---|---|---|
+| 2026-05-02T06:59:08Z | ble_air_trace_analysis | RK6006 | 109 | hci0 | [BLE Over-the-Air Trace Analysis 2026-05-02](ble_air_trace_analysis_2026-05-02.md) |
 | 2026-05-02T03:56:50Z | waveform_capture | RK6006 | 109 | /dev/ttyUSB0 | [Waveform Capture RK6006 20260502-035650Z](rk6006-id60066-fw109/waveform_capture/20260502-035650Z/report.md) |
 | 2026-05-02T03:55:34Z | timing_matrix | RK6006 | 109 | /dev/ttyUSB0 | [Timing Matrix RK6006 20260502-035428Z](rk6006-id60066-fw109/timing_matrix/20260502-035428Z/report.md) |
 | 2026-05-02T03:54:27Z | timing_matrix | RK6006 | 109 | /dev/ttyUSB0 | [Timing Matrix RK6006 20260502-035417Z](rk6006-id60066-fw109/timing_matrix/20260502-035417Z/report.md) |
