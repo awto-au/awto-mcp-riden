@@ -15,7 +15,7 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "mcp[cli]",
-    "modbus-tk>=1.1",
+    "pymodbus[serial]>=3.13",
     "pyserial>=3.5",
     "bleak>=0.22",
     "colorlog>=6.8",

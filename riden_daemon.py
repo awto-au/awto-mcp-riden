@@ -1315,3 +1315,48 @@ class RidenWorker:
                 "last_error":   self._last_error,
             }
 
+    def speed_test(self, count: int = 30) -> dict[str, Any]:
+        """Benchmark Modbus RTU round-trip latency (FC03 read of 9 registers).
+
+        Performs *count* back-to-back reads with no sleep between them,
+        measures wall-clock time for each, and returns summary statistics.
+        Uses raw serial to bypass pymodbus/ch341 exclusive lock issues.
+        """
+        import statistics as _stats
+        from riden_transport import SerialTransport
+
+        REG_START = 10
+        REG_COUNT = 9
+
+        tr = SerialTransport(self._port, self._baud, self._address, use_raw_serial=True)
+        try:
+            tr.open()
+        except IOError:
+            # If raw serial fails, try pymodbus
+            tr._use_raw_serial = False
+            tr.open()
+        
+        try:
+            times_ms: list[float] = []
+            for _ in range(count):
+                t0 = time.perf_counter()
+                tr.read(REG_START, REG_COUNT)
+                times_ms.append((time.perf_counter() - t0) * 1000)
+        finally:
+            tr.close()
+
+        return {
+            "transport":    "raw_serial" if tr._use_raw_serial else "pymodbus",
+            "port":         self._port,
+            "baud":         self._baud,
+            "count":        count,
+            "reg_start":    REG_START,
+            "reg_count":    REG_COUNT,
+            "min_ms":       round(min(times_ms), 2),
+            "median_ms":    round(_stats.median(times_ms), 2),
+            "mean_ms":      round(_stats.mean(times_ms), 2),
+            "max_ms":       round(max(times_ms), 2),
+            "stdev_ms":     round(_stats.stdev(times_ms), 2) if count > 1 else 0.0,
+            "poll_hz":      round(1000 / _stats.median(times_ms), 2),
+        }
+

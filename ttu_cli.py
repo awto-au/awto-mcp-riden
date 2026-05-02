@@ -161,6 +161,9 @@ def main() -> None:
 
     sub.add_parser("log-stop", help="stop periodic logging", formatter_class=_F)
 
+    sp_st = sub.add_parser("speed-test", help="benchmark Modbus round-trip latency", formatter_class=_F)
+    sp_st.add_argument("--count", type=int, default=30, metavar="N", help="number of reads (default: 30)")
+
     args = ap.parse_args()
     if args.subcmd is None:
         ap.print_help()
@@ -213,6 +216,8 @@ def main() -> None:
         elif c == "log-stop":
             worker.log_stop()
             result = {"ok": True}
+        elif c == "speed-test":
+            result = worker.speed_test(args.count)
 
         print(json.dumps(result, indent=2))
     except Exception as e:
