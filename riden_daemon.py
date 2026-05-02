@@ -14,6 +14,8 @@ import json
 import logging
 import logging.handlers
 import math
+import os
+import re
 import statistics
 import sys
 import threading
@@ -1445,18 +1447,56 @@ class RidenWorker:
                 "serial_profile": self._serial_profile,
             }
 
-    def speed_test(self, count: int = 30) -> dict[str, Any]:
-        """Benchmark Modbus RTU round-trip latency (FC03 read of 9 registers).
+    def _usb_topology_info(self) -> dict[str, Any]:
+        """Best-effort USB topology details for /dev/ttyUSB* devices."""
+        out: dict[str, Any] = {
+            "port": self._port,
+            "is_usb_tty": False,
+            "sysfs_path": None,
+            "usb_bus_path": None,
+            "hub_depth": None,
+        }
+        if not self._port.startswith("/dev/ttyUSB"):
+            return out
 
-        Performs *count* back-to-back reads with no sleep between them,
-        measures wall-clock time for each, and returns summary statistics.
-        Uses raw serial to bypass pymodbus/ch341 exclusive lock issues.
+        out["is_usb_tty"] = True
+        tty_name = os.path.basename(self._port)
+        link = f"/sys/class/tty/{tty_name}/device"
+        try:
+            real = os.path.realpath(link)
+            out["sysfs_path"] = real
+            m = re.search(r"/(\d+-[\d.]+):\d+\.\d+", real)
+            if m:
+                usb_bus_path = m.group(1)
+                out["usb_bus_path"] = usb_bus_path
+                # Count hops beyond root port (e.g. 1-2.3.4 => 2 hubs deep)
+                chain = usb_bus_path.split("-", 1)[1]
+                out["hub_depth"] = max(0, chain.count("."))
+        except Exception:
+            pass
+
+        return out
+
+    def speed_test(self, count: int = 30, register_profile: bool = False) -> dict[str, Any]:
+        """Benchmark Modbus RTU round-trip latency.
+
+        Default mode measures FC03 on the core status block (regs 10..18).
+        Optional register_profile mode compares multiple register groups to
+        detect whether specific addresses are significantly slower.
         """
         import statistics as _stats
         from riden_transport import SerialTransport
 
         REG_START = 10
         REG_COUNT = 9
+        REG_CASES = [
+            ("id_block", 0, 4),
+            ("v_out_only", 10, 1),
+            ("i_out_only", 11, 1),
+            ("state_only", 16, 3),
+            ("status_block", 10, 9),
+            ("ovp_ocp_regs", 82, 2),
+        ]
 
         tr = SerialTransport(self._port, self._baud, self._address, use_raw_serial=True)
         try:
@@ -1467,26 +1507,72 @@ class RidenWorker:
             tr.open()
         
         try:
-            times_ms: list[float] = []
-            for _ in range(count):
-                t0 = time.perf_counter()
-                tr.read(REG_START, REG_COUNT)
-                times_ms.append((time.perf_counter() - t0) * 1000)
+            def _summary(times_ms: list[float], reg_start: int, reg_count: int) -> dict[str, Any]:
+                s = sorted(times_ms)
+                p95 = s[int(0.95 * (len(s) - 1))]
+                p99 = s[int(0.99 * (len(s) - 1))]
+                return {
+                    "count": len(times_ms),
+                    "reg_start": reg_start,
+                    "reg_count": reg_count,
+                    "min_ms": round(min(s), 3),
+                    "median_ms": round(_stats.median(s), 3),
+                    "mean_ms": round(_stats.mean(s), 3),
+                    "p95_ms": round(p95, 3),
+                    "p99_ms": round(p99, 3),
+                    "max_ms": round(max(s), 3),
+                    "stdev_ms": round(_stats.stdev(s), 3) if len(s) > 1 else 0.0,
+                    "poll_hz": round(1000 / _stats.median(s), 2),
+                }
+
+            if register_profile:
+                by_register: list[dict[str, Any]] = []
+                for name, reg_start, reg_count in REG_CASES:
+                    times_ms: list[float] = []
+                    errors = 0
+                    try:
+                        tr.read(reg_start, reg_count)  # warm-up
+                    except Exception:
+                        pass
+                    for _ in range(count):
+                        t0 = time.perf_counter()
+                        try:
+                            tr.read(reg_start, reg_count)
+                            times_ms.append((time.perf_counter() - t0) * 1000)
+                        except Exception:
+                            errors += 1
+                    if times_ms:
+                        item = _summary(times_ms, reg_start, reg_count)
+                        item["name"] = name
+                        item["errors"] = errors
+                    else:
+                        item = {
+                            "name": name,
+                            "reg_start": reg_start,
+                            "reg_count": reg_count,
+                            "count": 0,
+                            "errors": errors,
+                        }
+                    by_register.append(item)
+            else:
+                times_ms: list[float] = []
+                for _ in range(count):
+                    t0 = time.perf_counter()
+                    tr.read(REG_START, REG_COUNT)
+                    times_ms.append((time.perf_counter() - t0) * 1000)
         finally:
             tr.close()
 
-        return {
+        out = {
             "transport":    "raw_serial" if tr._use_raw_serial else "pymodbus",
             "port":         self._port,
             "baud":         self._baud,
-            "count":        count,
-            "reg_start":    REG_START,
-            "reg_count":    REG_COUNT,
-            "min_ms":       round(min(times_ms), 2),
-            "median_ms":    round(_stats.median(times_ms), 2),
-            "mean_ms":      round(_stats.mean(times_ms), 2),
-            "max_ms":       round(max(times_ms), 2),
-            "stdev_ms":     round(_stats.stdev(times_ms), 2) if count > 1 else 0.0,
-            "poll_hz":      round(1000 / _stats.median(times_ms), 2),
+            "usb_topology": self._usb_topology_info(),
+            "register_profile": register_profile,
         }
+        if register_profile:
+            out["by_register"] = by_register
+        else:
+            out.update(_summary(times_ms, REG_START, REG_COUNT))
+        return out
 

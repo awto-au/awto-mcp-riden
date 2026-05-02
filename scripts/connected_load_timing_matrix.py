@@ -42,7 +42,30 @@ def _percentile(sorted_vals: list[float], p: float) -> float:
     return sorted_vals[idx]
 
 
-def run_case(worker: RidenWorker, poll_ms: int, samples: int) -> dict:
+def _read_status_fast(worker: RidenWorker) -> dict:
+    """Fast status read using a single FC03 block (regs 10..18)."""
+    with worker._lock:
+        psu = worker._assert_connected()
+        raw = psu.transport.read(worker._REG_V_OUT, worker._REG_BLOCK_COUNT)
+
+    v_out = round(psu.get_v_out(raw[0]), 3)
+    i_out = round(psu.get_i_out(raw[1]), 4)
+    p_out = round(float(raw[3]) / psu.p_multi, 3)
+    cv_cc = "CV" if raw[7] == 0 else "CC"
+    protect = {0: "none", 1: "OVP", 2: "OCP"}.get(raw[6], "none")
+    output = bool(raw[8])
+
+    return {
+        "v_out": v_out,
+        "i_out": i_out,
+        "p_out": p_out,
+        "cv_cc": cv_cc,
+        "protect": protect,
+        "output": output,
+    }
+
+
+def run_case(worker: RidenWorker, poll_ms: int, samples: int, read_mode: str) -> dict:
     rows = []
     dts = []
     errs = 0
@@ -52,7 +75,10 @@ def run_case(worker: RidenWorker, poll_ms: int, samples: int) -> dict:
     for _ in range(samples):
         t0 = time.perf_counter()
         try:
-            st = worker.status()
+            if read_mode == "fast":
+                st = _read_status_fast(worker)
+            else:
+                st = worker.status()
             t1 = time.perf_counter()
             dt_ms = (t1 - t0) * 1000.0
             loop_dt_ms = (t1 - prev_t) * 1000.0
@@ -162,6 +188,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--poll-ms", default="20,50,100,150,200", help="Comma-separated cadence list")
     p.add_argument("--samples", type=int, default=120, help="Samples per cadence point")
     p.add_argument("--settle-s", type=float, default=3.0, help="Settle time after enabling output")
+    p.add_argument("--read-mode", choices=["fast", "full"], default="fast", help="Sampling mode: fast=single FC03 block (regs 10..18), full=worker.status()")
     p.add_argument("--out", default="docs/connected_load_timing_matrix", help="Output prefix (without extension)")
     return p.parse_args()
 
@@ -181,6 +208,7 @@ def main() -> int:
         "baud": args.baud,
         "address": args.address,
         "setpoint": {"voltage": args.voltage, "current": args.current},
+        "read_mode": args.read_mode,
         "samples_per_point": args.samples,
         "poll_points_ms": poll_points,
         "results": [],
@@ -203,7 +231,7 @@ def main() -> int:
         time.sleep(max(0.0, args.settle_s))
 
         for poll in poll_points:
-            case = run_case(worker, poll_ms=poll, samples=args.samples)
+            case = run_case(worker, poll_ms=poll, samples=args.samples, read_mode=args.read_mode)
             report["results"].append(case)
             rtt = case.get("rtt", {})
             print(

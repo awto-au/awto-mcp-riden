@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Generate layered waveform documentation graphs from captured JSONL files."""
+"""Generate waveform documentation graphs from captured JSONL files."""
+
+from __future__ import annotations
+
 import json
-import math
-import sys
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 import numpy as np
 
 
@@ -27,92 +28,130 @@ def load(path):
     return rows
 
 
-def plot_waveform_panel(ax, rows, label, color_v="#1f77b4", color_i="#d62728"):
+def _period_plot(ax, rows, label):
     if not rows:
+        ax.set_title(f"{label} (no data)")
         return
-    t0 = rows[0]["ts"]
-    t  = np.array([r["ts"] - t0 for r in rows])
-    vs = np.array([r.get("v_set", r["v_out"]) for r in rows])
-    v  = np.array([r["v_out"] for r in rows])
-    i  = np.array([r["i_out"] for r in rows])
+    # Use explicit captured phase if available; fallback to normalized elapsed.
+    if "phase" in rows[0]:
+        phase = np.array([r["phase"] for r in rows])
+    else:
+        t = np.array([r["ts"] for r in rows])
+        dt = t - t.min()
+        duration = dt.max() if dt.max() > 0 else 1.0
+        phase = (dt / duration) % 1.0
 
-    dt_med = float(np.median(np.diff(t))) if len(t) > 1 else 0
-    rate   = f"≈{1/dt_med:.1f} Hz" if dt_med > 0 else "?"
+    order = np.argsort(phase)
+    x = phase[order]
+    v_set = np.array([r.get("v_set", 0.0) for r in rows])[order]
+    v_out = np.array([r.get("v_out", 0.0) for r in rows])[order]
+    i_out = np.array([r.get("i_out", 0.0) for r in rows])[order]
 
-    ax.set_title(f"{label}  (poll {rate}, Δt median {dt_med*1000:.0f} ms)", pad=6, fontsize=9)
-    ax.set_ylabel("Voltage (V)", color=color_v, fontsize=8)
-    ax.tick_params(axis="y", labelcolor=color_v, labelsize=7)
-    ax.tick_params(axis="x", labelsize=7)
-    ax.set_ylim(7, 13)
-
-    # V_set as dotted reference
-    ax.plot(t, vs, "--", color=color_v, linewidth=0.8, alpha=0.5, label="V_set")
-    # V_out solid
-    ax.plot(t, v, "-", color=color_v, linewidth=1.4, label="V_out")
+    ax.plot(x, v_set, "--", linewidth=1.0, alpha=0.6, label="V_set")
+    ax.plot(x, v_out, "-", linewidth=1.4, label="V_out")
+    ax.set_xlim(0, 1)
+    ax.set_xlabel("Phase (0..1, one period)")
+    ax.set_ylabel("Voltage (V)")
+    ax.set_title(label)
+    ax.grid(True, alpha=0.25)
 
     ax2 = ax.twinx()
-    ax2.set_ylabel("Current (A)", color=color_i, fontsize=8)
-    ax2.tick_params(axis="y", labelcolor=color_i, labelsize=7)
-    ax2.plot(t, i, "-", color=color_i, linewidth=1.2, alpha=0.85, label="I_out")
-    ax2.set_ylim(bottom=0)
+    ax2.plot(x, i_out, "-", linewidth=1.0, alpha=0.85, color="#d62728", label="I_out")
+    ax2.set_ylabel("Current (A)", color="#d62728")
+    ax2.tick_params(axis="y", labelcolor="#d62728")
 
-    # CC shading
-    if "cv_cc" in rows[0]:
-        in_cc, t_start = False, 0.0
-        for idx, r in enumerate(rows):
-            if r.get("cv_cc") == "CC" and not in_cc:
-                t_start = t[idx]; in_cc = True
-            elif r.get("cv_cc") != "CC" and in_cc:
-                ax.axvspan(t_start, t[idx], alpha=0.12, color="orange")
-                in_cc = False
-        if in_cc:
-            ax.axvspan(t_start, t[-1], alpha=0.12, color="orange", label="CC mode")
+    overshoot = float(np.max(v_out - v_set)) if len(v_out) else 0.0
+    ax.text(0.02, 0.92, f"max overshoot: {overshoot:.3f} V", transform=ax.transAxes, fontsize=8)
 
-    # Legend
     h1, l1 = ax.get_legend_handles_labels()
     h2, l2 = ax2.get_legend_handles_labels()
-    seen, hs, ls = set(), [], []
-    for h, l in zip(h1 + h2, l1 + l2):
-        if l not in seen:
-            seen.add(l); hs.append(h); ls.append(l)
-    ax.legend(hs, ls, loc="upper right", fontsize=7, framealpha=0.7)
-    ax.set_xlabel("Time (s)", fontsize=8)
+    ax.legend(h1 + h2, l1 + l2, loc="upper right", fontsize=8)
 
 
-# --- Slow waveforms (1 Hz, 0.5s step) ---
-slow_files = [
-    ("/tmp/wf_sine_slow.jsonl",   "Sine 0.5 Hz (step 0.45 s)"),
-    ("/tmp/wf_tri_slow.jsonl",    "Triangle 0.5 Hz (step 0.5 s)"),
-    ("/tmp/wf_sq_slow.jsonl",     "Square 0.5 Hz (step 0.5 s)"),
-]
+def _clip_plot(ax, rows):
+    if not rows:
+        ax.set_title("Current-limited sine clipping (no data)")
+        return
+    t0 = rows[0]["ts"]
+    t = np.array([r["ts"] - t0 for r in rows])
+    v_set = np.array([r.get("v_set", 0.0) for r in rows])
+    v_out = np.array([r.get("v_out", 0.0) for r in rows])
+    i_out = np.array([r.get("i_out", 0.0) for r in rows])
+    cv = np.array([r.get("cv_cc", "CV") for r in rows])
+    prot = np.array([r.get("protect", "none") for r in rows])
 
-fig, axes = plt.subplots(3, 1, figsize=(13, 12), tight_layout=True)
-fig.suptitle("MR11 LED Lamp — Waveform Response (8–12 V, I_lim 1.5 A)\n"
-             "Slow waveforms: 0.5 Hz period, 2 s cycle",
-             fontsize=11, fontweight="bold")
-for ax, (path, label) in zip(axes, slow_files):
-    plot_waveform_panel(ax, load(path), label)
+    ax.plot(t, v_set, "--", linewidth=1.0, alpha=0.6, label="V_set")
+    ax.plot(t, v_out, "-", linewidth=1.4, label="V_out")
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Voltage (V)")
+    ax.grid(True, alpha=0.25)
+    ax.set_title("Sine under current limiting (clipping / CC transitions)")
 
-out_slow = "/tmp/waveform_slow.png"
-plt.savefig(out_slow, dpi=150, bbox_inches="tight")
-plt.close(fig)
-print(f"Saved: {out_slow}")
+    ax2 = ax.twinx()
+    ax2.plot(t, i_out, "-", linewidth=1.0, alpha=0.85, color="#d62728", label="I_out")
+    ax2.set_ylabel("Current (A)", color="#d62728")
+    ax2.tick_params(axis="y", labelcolor="#d62728")
 
-# --- Fast waveforms (5 Hz, 0.1s step) ---
-fast_files = [
-    ("/tmp/wf_sine_fast.jsonl", "Sine 2 Hz (step 0.09 s)"),
-    ("/tmp/wf_sq_fast.jsonl",   "Square 2 Hz (step 0.1 s)"),
-]
+    in_cc = cv == "CC"
+    if np.any(in_cc):
+        start = None
+        for idx, is_cc in enumerate(in_cc):
+            if is_cc and start is None:
+                start = t[idx]
+            if (not is_cc) and start is not None:
+                ax.axvspan(start, t[idx], color="orange", alpha=0.15)
+                start = None
+        if start is not None:
+            ax.axvspan(start, t[-1], color="orange", alpha=0.15)
 
-fig, axes = plt.subplots(2, 1, figsize=(13, 9), tight_layout=True)
-fig.suptitle("MR11 LED Lamp — Waveform Response (8–12 V, I_lim 1.5 A)\n"
-             "Fast waveforms: 2 Hz period, 500 ms cycle\n"
-             "Note: Modbus RTU poll ≈ 290–440 ms → step lag clearly visible",
-             fontsize=11, fontweight="bold")
-for ax, (path, label) in zip(axes, fast_files):
-    plot_waveform_panel(ax, load(path), label)
+    oc_idx = np.where(prot != "none")[0]
+    if len(oc_idx) > 0:
+        ax.scatter(t[oc_idx], v_out[oc_idx], color="black", s=14, label="protect != none")
+    ax.text(
+        0.02,
+        0.92,
+        f"CC samples: {int(np.sum(in_cc))} / {len(rows)} | protect events: {len(oc_idx)}",
+        transform=ax.transAxes,
+        fontsize=8,
+    )
 
-out_fast = "/tmp/waveform_fast.png"
-plt.savefig(out_fast, dpi=150, bbox_inches="tight")
-plt.close(fig)
-print(f"Saved: {out_fast}")
+    h1, l1 = ax.get_legend_handles_labels()
+    h2, l2 = ax2.get_legend_handles_labels()
+    ax.legend(h1 + h2, l1 + l2, loc="upper right", fontsize=8)
+
+
+def main() -> int:
+    in_dir = Path("docs")
+
+    period_sets = [
+        (in_dir / "mr11_sine_period.jsonl", "Sine (period-wide)"),
+        (in_dir / "mr11_sawtooth_period.jsonl", "Sawtooth (period-wide)"),
+        (in_dir / "mr11_triangle_period.jsonl", "Triangle (period-wide)"),
+        (in_dir / "mr11_square_period.jsonl", "Square on/off (period-wide)"),
+    ]
+
+    fig, axes = plt.subplots(4, 1, figsize=(13, 14), tight_layout=True)
+    fig.suptitle(
+        "MR11 waveform tracking — one-period view (same settings, overshoot visible)",
+        fontsize=12,
+        fontweight="bold",
+    )
+    for ax, (path, label) in zip(axes, period_sets):
+        _period_plot(ax, load(path), label)
+    out_period = in_dir / "mr11_period_wide.png"
+    plt.savefig(out_period, dpi=160, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved: {out_period}")
+
+    clip_rows = load(in_dir / "mr11_sine_clipped_current_limit.jsonl")
+    fig, ax = plt.subplots(1, 1, figsize=(13, 5.6), tight_layout=True)
+    _clip_plot(ax, clip_rows)
+    out_clip = in_dir / "mr11_current_limit_clip.png"
+    plt.savefig(out_clip, dpi=160, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved: {out_clip}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

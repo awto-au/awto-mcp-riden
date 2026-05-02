@@ -163,6 +163,11 @@ def main() -> None:
 
     sp_st = sub.add_parser("speed-test", help="benchmark Modbus round-trip latency", formatter_class=_F)
     sp_st.add_argument("--count", type=int, default=30, metavar="N", help="number of reads (default: 30)")
+    sp_st.add_argument(
+        "--register-profile",
+        action="store_true",
+        help="benchmark multiple register groups to detect register-specific slowness",
+    )
 
     sp_prof = sub.add_parser("profile-serial", help="profile serial timing and recommend stable poll cadence", formatter_class=_F)
     sp_prof.add_argument("--count", type=int, default=20, metavar="N", help="number of reads (default: 20)")
@@ -221,7 +226,7 @@ def main() -> None:
             worker.log_stop()
             result = {"ok": True}
         elif c == "speed-test":
-            result = worker.speed_test(args.count)
+            result = worker.speed_test(args.count, register_profile=args.register_profile)
         elif c == "profile-serial":
             result = worker.profile_serial(args.count, args.sleep_ms)
 

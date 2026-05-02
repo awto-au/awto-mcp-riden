@@ -6,52 +6,80 @@ Connected-load waveform behavior and timing accuracy notes for Riden PSU tests.
 
 These captures show the MR11 lamp response under commanded waveform output. The key behavior is that measured output tracking is limited by poll/update timing, not wire baud alone.
 
-![MR11 slow waveform response](waveform_slow.png)
+![MR11 period-wide waveform response](mr11_period_wide.png)
 
-Slow waveform reference capture.
+Period-wide comparison for sine, sawtooth, triangle, and square drive using identical center/amplitude settings. Each panel overlays `V_set`, `V_out`, and `I_out`, and annotates maximum voltage overshoot.
 
-![MR11 fast waveform response](waveform_fast.png)
+![MR11 current-limit clipping response](mr11_current_limit_clip.png)
 
-Fast waveform reference capture.
+Current-limited sine capture showing clip behavior under low current limit. For this run (`I_limit=0.2 A`):
 
-## Connected-Load Timing Test Set
+- rows: 28
+- CC samples: 28/28
+- protect events (`protect != none`): 0
 
-Combined capabilities overview (fastest + cadence suites):
+Interpretation:
 
-![Connected-load timing capabilities](timing_capabilities_overview.png)
+- The output is clipping through sustained CC limiting (expected under this limit).
+- No OCP/OVP latch event was observed in this run.
 
-Detailed table output:
+## MR11 Fastest vs Safe vs Comprehensive (rerun)
 
-- [timing_test_set_summary.md](timing_test_set_summary.md)
+### 1) Fastest possible with errors/timeout tracking
 
-### Quick suite (12 samples/point)
+Run mode: `--read-mode fast`, poll cadence `0 ms`, `240` samples.
 
-- 0 ms (fastest/no cadence): p50 145.779 ms, p95 146.554 ms, jitter 0.775 ms
-- 100 ms cadence: p50 146.545 ms, p95 146.878 ms, jitter 0.333 ms
-- 150 ms cadence: p50 140.863 ms, p95 555.864 ms, jitter 415.001 ms
-
-### Comprehensive suite (80 samples/point)
-
-- 0 ms (fastest/no cadence): p50 146.320 ms, p95 147.003 ms, jitter 0.682 ms
-- 20 ms cadence: p50 146.379 ms, p95 146.949 ms, jitter 0.570 ms
-- 50 ms cadence: p50 146.385 ms, p95 147.189 ms, jitter 0.803 ms
-- 100 ms cadence: p50 146.257 ms, p95 147.174 ms, jitter 0.918 ms
-- 150 ms cadence: p50 93.846 ms, p95 146.632 ms, jitter 52.787 ms
-
-### Recommendation from this run
-
-- Recommended poll cadence: 200 ms (derived from $p95 + 20$ ms headroom, quantized upward)
+- p50: 144.827 ms
+- p95: 145.725 ms
+- p99: 146.005 ms
+- jitter (p95-p50): 0.898 ms
+- timeout/error rate: 0.00%
 
 Artifacts:
 
-- `connected_load_timing_matrix_quick.json`
-- `connected_load_timing_matrix_quick.rtt.png`
-- `connected_load_timing_matrix_quick.timeout.png`
-- `connected_load_timing_matrix_comprehensive.json`
-- `connected_load_timing_matrix_comprehensive.rtt.png`
-- `connected_load_timing_matrix_comprehensive.timeout.png`
-- `timing_test_set_summary.md`
-- `timing_capabilities_overview.png`
+- `mr11_fastest_errors.json`
+- `mr11_fastest_errors.rtt.png`
+- `mr11_fastest_errors.timeout.png`
+
+### 2) Safe cadence run
+
+Safe cadence selected from fastest-run tail behavior: `180 ms`.
+Run mode: `--read-mode fast`, `240` samples.
+
+- p50: 89.795 ms
+- p95: 148.011 ms
+- p99: 150.797 ms
+- jitter (p95-p50): 58.217 ms
+- timeout/error rate: 0.00%
+
+Artifacts:
+
+- `mr11_safe_cadence.json`
+- `mr11_safe_cadence.rtt.png`
+- `mr11_safe_cadence.timeout.png`
+
+### 3) Comprehensive report
+
+Run mode: `--read-mode fast`, cadences `0,20,50,100,150,180,200`, `120` samples per point.
+
+- 0 ms: p50 144.819, p95 145.731, p99 145.971, timeout 0.00%
+- 20 ms: p50 144.835, p95 145.583, p99 145.891, timeout 0.00%
+- 50 ms: p50 144.719, p95 145.506, p99 145.549, timeout 0.00%
+- 100 ms: p50 144.918, p95 145.628, p99 145.706, timeout 0.00%
+- 150 ms: p50 95.586, p95 147.583, p99 150.563, timeout 0.00%
+- 180 ms: p50 89.372, p95 149.580, p99 150.609, timeout 0.00%
+- 200 ms: p50 90.106, p95 148.182, p99 150.660, timeout 0.00%
+
+Artifacts:
+
+- `mr11_comprehensive_fast_vs_safe.json`
+- `mr11_comprehensive_fast_vs_safe.rtt.png`
+- `mr11_comprehensive_fast_vs_safe.timeout.png`
+
+Interpretation note:
+
+- Tail behavior (p99) is much more stable for safety sizing than p50 alone.
+- Mid/high cadences can show bimodal phase effects (very low p50 with much higher p95/p99).
 
 ## Timestamp and Accuracy Notes
 
@@ -65,10 +93,59 @@ This page should be read as a timing behavior report, not a deterministic per-sa
 
 ## Regeneration
 
-One command to regenerate quick + comprehensive + analysis artifacts:
+Waveform captures and plots:
 
 ```bash
-./scripts/regenerate_timing_artifacts.sh /dev/ttyUSB0 12 1.5
+python3 scripts/waveform_capture.py \
+  --port /dev/ttyUSB0 \
+  --out-dir docs \
+  --freq-hz 0.5 \
+  --periods 4 \
+  --v-center 10 \
+  --v-amp 2 \
+  --i-limit-normal 1.5 \
+  --i-limit-clipped 0.2
+
+python3 scripts/plot_waveforms.py
+```
+
+Fastest run:
+
+```bash
+python3 scripts/connected_load_timing_matrix.py \
+  --port /dev/ttyUSB0 \
+  --voltage 12 --current 1.5 \
+  --poll-ms 0 \
+  --samples 240 \
+  --settle-s 2 \
+  --read-mode fast \
+  --out docs/mr11_fastest_errors
+```
+
+Safe cadence run:
+
+```bash
+python3 scripts/connected_load_timing_matrix.py \
+  --port /dev/ttyUSB0 \
+  --voltage 12 --current 1.5 \
+  --poll-ms 180 \
+  --samples 240 \
+  --settle-s 2 \
+  --read-mode fast \
+  --out docs/mr11_safe_cadence
+```
+
+Comprehensive run:
+
+```bash
+python3 scripts/connected_load_timing_matrix.py \
+  --port /dev/ttyUSB0 \
+  --voltage 12 --current 1.5 \
+  --poll-ms 0,20,50,100,150,180,200 \
+  --samples 120 \
+  --settle-s 2 \
+  --read-mode fast \
+  --out docs/mr11_comprehensive_fast_vs_safe
 ```
 
 ## Next Step (Exhaustive Matrix)
