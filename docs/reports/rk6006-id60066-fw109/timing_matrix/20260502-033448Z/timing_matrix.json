@@ -1,0 +1,504 @@
+{
+  "captured_on": "2026-05-02T03:34:48Z",
+  "port": "/dev/ttyUSB0",
+  "baud": 115200,
+  "address": 1,
+  "setpoint": {
+    "voltage": 12.0,
+    "current": 1.5
+  },
+  "read_mode": "fast",
+  "samples_per_point": 12,
+  "poll_points_ms": [
+    0,
+    100,
+    150
+  ],
+  "results": [
+    {
+      "poll_ms": 0,
+      "samples_ok": 12,
+      "samples_err": 0,
+      "interrupted": false,
+      "timeout_rate": 0.0,
+      "rtt": {
+        "min_ms": 141.181,
+        "p50_ms": 145.016,
+        "p90_ms": 145.374,
+        "p95_ms": 145.866,
+        "max_ms": 145.927,
+        "mean_ms": 144.817,
+        "jitter_p95_minus_p50_ms": 0.85
+      },
+      "stability": {
+        "v_out_mean": 12.0017,
+        "v_out_std": 0.00373,
+        "i_out_mean": 0.60075,
+        "i_out_std": 0.000595
+      },
+      "rows": [
+        {
+          "ts": 1777692893.373124,
+          "rtt_ms": 141.18089400017197,
+          "loop_dt_ms": 141.18304800012993,
+          "v_out": 12.0,
+          "i_out": 0.601,
+          "p_out": 7.21,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692893.5185006,
+          "rtt_ms": 145.37423199999466,
+          "loop_dt_ms": 145.37749700002678,
+          "v_out": 12.0,
+          "i_out": 0.601,
+          "p_out": 7.21,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692893.663607,
+          "rtt_ms": 145.10385499988843,
+          "loop_dt_ms": 145.10609799981466,
+          "v_out": 12.0,
+          "i_out": 0.601,
+          "p_out": 7.21,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692893.8086722,
+          "rtt_ms": 145.06286499999987,
+          "loop_dt_ms": 145.06553599994731,
+          "v_out": 12.01,
+          "i_out": 0.6,
+          "p_out": 7.2,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692893.953785,
+          "rtt_ms": 145.1099079999949,
+          "loop_dt_ms": 145.11241900027017,
+          "v_out": 12.01,
+          "i_out": 0.601,
+          "p_out": 7.21,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692894.098675,
+          "rtt_ms": 144.8878009996406,
+          "loop_dt_ms": 144.89063499968324,
+          "v_out": 12.0,
+          "i_out": 0.602,
+          "p_out": 7.22,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692894.2435563,
+          "rtt_ms": 144.87947600036932,
+          "loop_dt_ms": 144.88124500030608,
+          "v_out": 12.0,
+          "i_out": 0.6,
+          "p_out": 7.2,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692894.3884976,
+          "rtt_ms": 144.93532599999526,
+          "loop_dt_ms": 144.93718699986857,
+          "v_out": 12.0,
+          "i_out": 0.601,
+          "p_out": 7.21,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692894.5343666,
+          "rtt_ms": 145.86629299992637,
+          "loop_dt_ms": 145.87294100010695,
+          "v_out": 12.0,
+          "i_out": 0.601,
+          "p_out": 7.21,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692894.6793385,
+          "rtt_ms": 144.96957200026372,
+          "loop_dt_ms": 144.97196699994674,
+          "v_out": 12.0,
+          "i_out": 0.601,
+          "p_out": 7.21,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692894.8238502,
+          "rtt_ms": 144.50931100009257,
+          "loop_dt_ms": 144.51172400003998,
+          "v_out": 12.0,
+          "i_out": 0.6,
+          "p_out": 7.2,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692894.9697795,
+          "rtt_ms": 145.9269420001874,
+          "loop_dt_ms": 145.92906200005018,
+          "v_out": 12.0,
+          "i_out": 0.6,
+          "p_out": 7.2,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        }
+      ]
+    },
+    {
+      "poll_ms": 100,
+      "samples_ok": 12,
+      "samples_err": 0,
+      "interrupted": false,
+      "timeout_rate": 0.0,
+      "rtt": {
+        "min_ms": 144.134,
+        "p50_ms": 144.354,
+        "p90_ms": 145.388,
+        "p95_ms": 145.425,
+        "max_ms": 145.598,
+        "mean_ms": 144.696,
+        "jitter_p95_minus_p50_ms": 1.07
+      },
+      "stability": {
+        "v_out_mean": 12.0033,
+        "v_out_std": 0.00471,
+        "i_out_mean": 0.59992,
+        "i_out_std": 0.000276
+      },
+      "rows": [
+        {
+          "ts": 1777692895.1141858,
+          "rtt_ms": 144.13390800018533,
+          "loop_dt_ms": 144.13446800017482,
+          "v_out": 12.0,
+          "i_out": 0.6,
+          "p_out": 7.2,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692895.2597868,
+          "rtt_ms": 145.5982560000848,
+          "loop_dt_ms": 145.6012999997256,
+          "v_out": 12.0,
+          "i_out": 0.6,
+          "p_out": 7.2,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692895.4052134,
+          "rtt_ms": 145.42486500022278,
+          "loop_dt_ms": 145.42693100020188,
+          "v_out": 12.01,
+          "i_out": 0.6,
+          "p_out": 7.2,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692895.5495777,
+          "rtt_ms": 144.36237000018082,
+          "loop_dt_ms": 144.36415299996952,
+          "v_out": 12.01,
+          "i_out": 0.6,
+          "p_out": 7.2,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692895.6949334,
+          "rtt_ms": 145.35387700016145,
+          "loop_dt_ms": 145.3558289999819,
+          "v_out": 12.01,
+          "i_out": 0.6,
+          "p_out": 7.2,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692895.840324,
+          "rtt_ms": 145.38838399994347,
+          "loop_dt_ms": 145.39017500010232,
+          "v_out": 12.0,
+          "i_out": 0.6,
+          "p_out": 7.2,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692895.9846275,
+          "rtt_ms": 144.30188300002555,
+          "loop_dt_ms": 144.30389099970853,
+          "v_out": 12.0,
+          "i_out": 0.6,
+          "p_out": 7.2,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692896.1290908,
+          "rtt_ms": 144.46137300001283,
+          "loop_dt_ms": 144.46323200036204,
+          "v_out": 12.0,
+          "i_out": 0.6,
+          "p_out": 7.2,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692896.273439,
+          "rtt_ms": 144.34661499990398,
+          "loop_dt_ms": 144.34812899980898,
+          "v_out": 12.01,
+          "i_out": 0.6,
+          "p_out": 7.2,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692896.417761,
+          "rtt_ms": 144.3204600000172,
+          "loop_dt_ms": 144.32222100003855,
+          "v_out": 12.0,
+          "i_out": 0.6,
+          "p_out": 7.2,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692896.5620892,
+          "rtt_ms": 144.3267850004304,
+          "loop_dt_ms": 144.32827500013445,
+          "v_out": 12.0,
+          "i_out": 0.6,
+          "p_out": 7.2,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692896.7064257,
+          "rtt_ms": 144.33423400032552,
+          "loop_dt_ms": 144.33581299999787,
+          "v_out": 12.0,
+          "i_out": 0.599,
+          "p_out": 7.18,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        }
+      ]
+    },
+    {
+      "poll_ms": 150,
+      "samples_ok": 12,
+      "samples_err": 0,
+      "interrupted": false,
+      "timeout_rate": 0.0,
+      "rtt": {
+        "min_ms": 80.227,
+        "p50_ms": 111.386,
+        "p90_ms": 131.772,
+        "p95_ms": 138.053,
+        "max_ms": 143.412,
+        "mean_ms": 111.462,
+        "jitter_p95_minus_p50_ms": 26.666
+      },
+      "stability": {
+        "v_out_mean": 12.0,
+        "v_out_std": 0.0,
+        "i_out_mean": 0.59925,
+        "i_out_std": 0.000433
+      },
+      "rows": [
+        {
+          "ts": 1777692896.8500009,
+          "rtt_ms": 143.4123459998773,
+          "loop_dt_ms": 143.41263200003596,
+          "v_out": 12.0,
+          "i_out": 0.6,
+          "p_out": 7.2,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692896.9946957,
+          "rtt_ms": 138.05252499969356,
+          "loop_dt_ms": 144.69478699993488,
+          "v_out": 12.0,
+          "i_out": 0.6,
+          "p_out": 7.2,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692897.1384716,
+          "rtt_ms": 131.77154499999233,
+          "loop_dt_ms": 143.77589000014268,
+          "v_out": 12.0,
+          "i_out": 0.599,
+          "p_out": 7.18,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692897.2832258,
+          "rtt_ms": 126.4693740004077,
+          "loop_dt_ms": 144.75444200024867,
+          "v_out": 12.0,
+          "i_out": 0.599,
+          "p_out": 7.18,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692897.4270506,
+          "rtt_ms": 120.23800400038454,
+          "loop_dt_ms": 143.82428199996866,
+          "v_out": 12.0,
+          "i_out": 0.599,
+          "p_out": 7.18,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692897.5708406,
+          "rtt_ms": 113.97122600010334,
+          "loop_dt_ms": 143.79049699982716,
+          "v_out": 12.0,
+          "i_out": 0.6,
+          "p_out": 7.2,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692897.7157276,
+          "rtt_ms": 108.80144199973074,
+          "loop_dt_ms": 144.8869629998626,
+          "v_out": 12.0,
+          "i_out": 0.599,
+          "p_out": 7.18,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692897.8591967,
+          "rtt_ms": 102.21310099996117,
+          "loop_dt_ms": 143.46905000002153,
+          "v_out": 12.0,
+          "i_out": 0.599,
+          "p_out": 7.18,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692898.0033965,
+          "rtt_ms": 96.24319700014894,
+          "loop_dt_ms": 144.19960400027776,
+          "v_out": 12.0,
+          "i_out": 0.599,
+          "p_out": 7.18,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692898.1479628,
+          "rtt_ms": 90.74611599999116,
+          "loop_dt_ms": 144.56212599998253,
+          "v_out": 12.0,
+          "i_out": 0.599,
+          "p_out": 7.18,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692898.2926676,
+          "rtt_ms": 85.3954980002527,
+          "loop_dt_ms": 144.7090990000106,
+          "v_out": 12.0,
+          "i_out": 0.599,
+          "p_out": 7.18,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        },
+        {
+          "ts": 1777692898.4375598,
+          "rtt_ms": 80.22682399996484,
+          "loop_dt_ms": 144.89197900002182,
+          "v_out": 12.0,
+          "i_out": 0.599,
+          "p_out": 7.18,
+          "cv_cc": "CV",
+          "protect": "none",
+          "output": true
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Host-side timing (perf_counter) around worker.status() call.",
+    "Modbus RTU has no device timestamp fields; no exact device sample-time recovery.",
+    "Use p95 and timeout_rate to choose robust cadence under load."
+  ],
+  "device": {
+    "type": "RK6006",
+    "id": 60066,
+    "sn": "00001036",
+    "fw": 109,
+    "port": "/dev/ttyUSB0",
+    "baud": 115200,
+    "address": 1,
+    "transport": "usb-serial"
+  },
+  "run_stamp": "20260502-033448Z",
+  "normalized_output_prefix": "/home/dan/git/awto-mcp-riden/docs/data/connected_load_timing_matrix_quick"
+}

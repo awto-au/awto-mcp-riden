@@ -24,7 +24,7 @@ Latest measured set summary:
 Regenerate all timing artifacts in one command:
 
 ```bash
-./scripts/regenerate_timing_artifacts.sh /dev/ttyUSB0 12 1.5
+./scripts/regenerate_timing_artifacts.sh /dev/ttyUSB0 1.0 0.2
 ```
 
 ## Quick start
@@ -165,7 +165,7 @@ Recommended one-command test set (includes fastest/no-cadence point `0 ms`):
 source .venv/bin/activate
 python3 scripts/timing_test_set.py \
   --port /dev/ttyUSB0 \
-  --voltage 12 --current 1.5 \
+  --voltage 1.0 --current 0.2 \
   --mode both \
   --quick-samples 12 \
   --comprehensive-samples 80 \
@@ -173,13 +173,17 @@ python3 scripts/timing_test_set.py \
   --comprehensive-poll-ms 0,20,50,100,150
 ```
 
+> **Load required.** The script turns the PSU output ON. Connect a resistive load
+> rated for your chosen voltage/current before running. A 3-second abort window is
+> printed at startup.
+
 Direct matrix runner:
 
 ```bash
 source .venv/bin/activate
 python3 scripts/connected_load_timing_matrix.py \
   --port /dev/ttyUSB0 \
-  --voltage 12 --current 1.5 \
+  --voltage 1.0 --current 0.2 \
   --poll-ms 0,20,50,100,150 \
   --samples 120 \
   --settle-s 3 \

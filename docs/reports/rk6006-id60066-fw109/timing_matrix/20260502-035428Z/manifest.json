@@ -1,0 +1,26 @@
+{
+  "report_kind": "timing_matrix",
+  "report_title": "Timing Matrix RK6006 20260502-035428Z",
+  "created_utc": "2026-05-02T03:55:34Z",
+  "run_dir": "rk6006-id60066-fw109/timing_matrix/20260502-035428Z",
+  "report_path": "rk6006-id60066-fw109/timing_matrix/20260502-035428Z/report.md",
+  "device": {
+    "type": "RK6006",
+    "id": 60066,
+    "sn": "00001036",
+    "fw": 109,
+    "port": "/dev/ttyUSB0",
+    "baud": 115200,
+    "address": 1,
+    "transport": "usb-serial"
+  },
+  "artifacts": [
+    "rk6006-id60066-fw109/timing_matrix/20260502-035428Z/report.md",
+    "rk6006-id60066-fw109/timing_matrix/20260502-035428Z/timing_matrix.json",
+    "rk6006-id60066-fw109/timing_matrix/20260502-035428Z/timing_matrix.rtt.png",
+    "rk6006-id60066-fw109/timing_matrix/20260502-035428Z/timing_matrix.timeout.png"
+  ],
+  "script": "scripts/connected_load_timing_matrix.py",
+  "device_slug": "rk6006-id60066-fw109",
+  "source_output_prefix": "/home/dan/git/awto-mcp-riden/docs/data/connected_load_timing_matrix_comprehensive"
+}

@@ -181,12 +181,19 @@ def make_plots(results: list[dict], out_prefix: Path) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Connected-load timing matrix for Riden PSU")
+    p = argparse.ArgumentParser(
+        description="Connected-load timing matrix for Riden PSU",
+        epilog=(
+            "WARNING: a real load MUST be connected before running. "
+            "Default is 1 V / 0.2 A — safe for most bench resistors. "
+            "Pass --voltage and --current to match your load."
+        ),
+    )
     p.add_argument("--port", default="/dev/ttyUSB0")
     p.add_argument("--baud", type=int, default=115200)
     p.add_argument("--address", type=int, default=1)
-    p.add_argument("--voltage", type=float, default=12.0, help="Setpoint voltage during test")
-    p.add_argument("--current", type=float, default=1.5, help="Current limit during test")
+    p.add_argument("--voltage", type=float, default=1.0, help="Setpoint voltage during test (default 1 V — safe start)")
+    p.add_argument("--current", type=float, default=0.2, help="Current limit during test (default 0.2 A — safe start)")
     p.add_argument("--poll-ms", default="20,50,100,150,200", help="Comma-separated cadence list")
     p.add_argument("--samples", type=int, default=120, help="Samples per cadence point")
     p.add_argument("--settle-s", type=float, default=3.0, help="Settle time after enabling output")
@@ -319,6 +326,21 @@ def main() -> int:
     interrupted = False
     out_prefix: Path | None = None
     device_meta: dict = {}
+
+    print()
+    print("WARNING: this script turns the PSU output ON at the requested voltage/current.")
+    print(f"  Voltage : {args.voltage} V")
+    print(f"  Current : {args.current} A")
+    print("  Ensure a compatible resistive load is connected BEFORE continuing.")
+    print("  Press Ctrl-C now to abort if no load is attached.")
+    print()
+    try:
+        import time as _time
+        _time.sleep(3)
+    except KeyboardInterrupt:
+        print("Aborted by user.")
+        return 1
+
     try:
         worker.open()
         device_meta = _get_device_meta(worker)

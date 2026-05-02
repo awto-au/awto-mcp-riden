@@ -79,22 +79,26 @@ def _build_metrics(data: dict) -> list[dict]:
     rows: list[dict] = []
     for r in data.get("results", []):
         rtt = r.get("rtt", {})
+        samples_ok = int(r.get("samples_ok", 0) or 0)
+        has_data = samples_ok > 0 and isinstance(rtt.get("p95_ms"), (int, float))
         rows.append(
             {
                 "poll_ms": r.get("poll_ms"),
-                "samples_ok": r.get("samples_ok", 0),
+                "samples_ok": samples_ok,
                 "samples_err": r.get("samples_err", 0),
                 "timeout_rate_pct": float(r.get("timeout_rate", 0.0)) * 100.0,
-                "p50_ms": rtt.get("p50_ms"),
-                "p95_ms": rtt.get("p95_ms"),
-                "jitter_ms": rtt.get("jitter_p95_minus_p50_ms"),
+                "p50_ms": rtt.get("p50_ms") if has_data else None,
+                "p95_ms": rtt.get("p95_ms") if has_data else None,
+                "jitter_ms": rtt.get("jitter_p95_minus_p50_ms") if has_data else None,
+                "has_data": has_data,
+                "status": "ok" if has_data else "no-data",
             }
         )
     return rows
 
 
 def _recommend(rows: list[dict]) -> int | None:
-    valid = [r for r in rows if isinstance(r.get("p95_ms"), (int, float))]
+    valid = [r for r in rows if r.get("has_data")]
     if not valid:
         return None
     best = min(valid, key=lambda r: (r.get("timeout_rate_pct", 100.0), r.get("jitter_ms", 1e9), r.get("p95_ms", 1e9)))
@@ -123,17 +127,24 @@ def _write_summary(path: Path, quick_data: dict | None, comp_data: dict | None) 
     else:
         rows = _build_metrics(data)
         rec = _recommend(rows)
-        lines.append("| poll_ms | ok | err | timeout_% | p50_ms | p95_ms | jitter_ms |")
-        lines.append("|---:|---:|---:|---:|---:|---:|---:|")
+        lines.append("| poll_ms | status | ok | err | timeout_% | p50_ms | p95_ms | jitter_ms |")
+        lines.append("|---:|---|---:|---:|---:|---:|---:|---:|")
         for r in rows:
             lines.append(
-                "| {poll_ms} | {samples_ok} | {samples_err} | {timeout_rate_pct:.2f} | {p50_ms} | {p95_ms} | {jitter_ms} |".format(
-                    **r
-                )
+                "| {poll_ms} | {status} | {samples_ok} | {samples_err} | {timeout_rate_pct:.2f} | {p50_ms} | {p95_ms} | {jitter_ms} |".format(**r)
             )
         lines.append("")
         if rec is not None:
             lines.append(f"Recommended poll cadence: **{rec} ms**")
+            lines.append("")
+        else:
+            lines.append("No valid timing capability points were found. All cadence rows were no-data.")
+            lines.append("")
+
+        no_data = [r["poll_ms"] for r in rows if not r.get("has_data")]
+        if no_data:
+            joined = ", ".join(str(v) for v in no_data)
+            lines.append(f"No-data cadence points: {joined} ms")
             lines.append("")
 
     path.write_text("\n".join(lines) + "\n")
@@ -145,13 +156,32 @@ def _plot_overview(out_png: Path, quick_data: dict | None, comp_data: dict | Non
         return
 
     rows = sorted(_build_metrics(data), key=lambda x: x["poll_ms"])
+    if not rows:
+        return
+
     x = [r["poll_ms"] for r in rows]
+    p50 = [r["p50_ms"] if r.get("has_data") else float("nan") for r in rows]
+    p95 = [r["p95_ms"] if r.get("has_data") else float("nan") for r in rows]
+    timeout_pct = [r["timeout_rate_pct"] for r in rows]
+    no_data_rows = [r for r in rows if not r.get("has_data")]
 
     plt.figure(figsize=(11, 6.5))
 
     ax1 = plt.subplot(2, 1, 1)
-    ax1.plot(x, [r["p50_ms"] for r in rows], "s-", label="p50")
-    ax1.plot(x, [r["p95_ms"] for r in rows], "s--", label="p95")
+    ax1.plot(x, p50, "s-", label="p50")
+    ax1.plot(x, p95, "s--", label="p95")
+    if no_data_rows:
+        ax1.scatter(
+            [r["poll_ms"] for r in no_data_rows],
+            [0.0] * len(no_data_rows),
+            marker="x",
+            s=70,
+            color="crimson",
+            label="no data",
+            zorder=5,
+        )
+        for r in no_data_rows:
+            ax1.annotate("no data", (r["poll_ms"], 0.0), xytext=(0, 8), textcoords="offset points", ha="center", fontsize=8)
     ax1.set_title("Connected-load timing capabilities")
     ax1.set_xlabel("Requested poll cadence (ms), 0 ms = fastest/no cadence")
     ax1.set_ylabel("Measured RTT (ms)")
@@ -159,7 +189,8 @@ def _plot_overview(out_png: Path, quick_data: dict | None, comp_data: dict | Non
     ax1.legend()
 
     ax2 = plt.subplot(2, 1, 2)
-    ax2.bar(x, [r["timeout_rate_pct"] for r in rows], width=8.0, alpha=0.75)
+    bar_colors = ["#4c78a8" if r.get("has_data") else "#d62728" for r in rows]
+    ax2.bar(x, timeout_pct, width=8.0, alpha=0.75, color=bar_colors)
     ax2.set_xlabel("Requested poll cadence (ms)")
     ax2.set_ylabel("Timeout/error rate (%)")
     ax2.grid(True, axis="y", alpha=0.3)
@@ -175,8 +206,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--port", default="/dev/ttyUSB0")
     p.add_argument("--baud", type=int, default=115200)
     p.add_argument("--address", type=int, default=1)
-    p.add_argument("--voltage", type=float, default=12.0)
-    p.add_argument("--current", type=float, default=1.5)
+    p.add_argument("--voltage", type=float, default=1.0, help="Setpoint voltage (default 1 V — safe start; use your load's rated voltage)")
+    p.add_argument("--current", type=float, default=0.2, help="Current limit (default 0.2 A — safe start; match your load)")
     p.add_argument("--mode", choices=["quick", "comprehensive", "both"], default="comprehensive")
 
     p.add_argument("--quick-poll-ms", default="0,100,150")
@@ -199,6 +230,22 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+
+    if not args.analyze_only:
+        print()
+        print("WARNING: this test turns the PSU output ON at the requested voltage/current.")
+        print(f"  Voltage : {args.voltage} V")
+        print(f"  Current : {args.current} A")
+        print("  Ensure a compatible resistive load is connected BEFORE continuing.")
+        print("  Press Ctrl-C now to abort if no load is attached.")
+        print()
+        try:
+            import time as _time
+            _time.sleep(3)
+        except KeyboardInterrupt:
+            print("Aborted by user.")
+            return 1
+
     out_dir = ROOT / args.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
