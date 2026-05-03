@@ -2,32 +2,36 @@
 awto-riden MCP server — direct serial, multi-PSU.
 
 Exposes Riden RD60xx power supply control as MCP tools for Copilot / AI agents.
-Supports one or more named PSUs on different serial ports.
+Supports zero-config autodiscovery at startup, while still allowing explicit
+single-PSU or multi-PSU CLI configuration when needed.
 
-Single PSU (backward compat):
-    python3 mcp_server.py --port /dev/ttyUSB0 --baud 115200 --name bench
+Default startup (autodiscover all likely serial ports, register found PSUs
+disconnected until the user approves them with rd_connect):
+        python3 mcp_server.py
 
-Multiple PSUs:
-    python3 mcp_server.py \
-        --psu bench:/dev/ttyUSB0:115200:1 \
-        --psu mr11:/dev/ttyUSB1:115200:1
+Single PSU (explicit, backward compatible):
+        python3 mcp_server.py --port /dev/ttyUSB0 --baud 115200 --name bench
 
-.vscode/mcp.json example (multi):
-    {
-      "servers": {
-        "awto-riden": {
-          "type": "stdio",
-          "command": "${workspaceFolder}/.venv/bin/python",
-          "args": [
-            "${workspaceFolder}/mcp_server.py",
-            "--psu", "bench:/dev/ttyUSB0:115200:1"
-          ]
+Multiple PSUs (explicit):
+        python3 mcp_server.py \
+                --psu bench:/dev/ttyUSB0:115200:1 \
+                --psu mr11:/dev/ttyUSB1:115200:1
+
+.vscode/mcp.json example:
+        {
+            "servers": {
+                "awto-riden": {
+                    "type": "stdio",
+                    "command": "${workspaceFolder}/.venv/bin/python",
+                    "args": [
+                        "${workspaceFolder}/mcp_server.py"
+                    ]
+                }
+            }
         }
-      }
-    }
 
 All tools accept an optional 'psu' parameter (default "default" or first PSU).
-Use rd_list_psus() to see available PSUs and their connection state.
+Use rd_list_psus() to see available PSUs and approval/connection state.
 Use rd_disconnect()/rd_connect() to release/reacquire the serial port — useful
 when you need to run a standalone script that requires exclusive port access.
 """
@@ -45,7 +49,7 @@ from mcp.server.fastmcp import FastMCP
 from riden_transport import find_riden_port, list_serial_ports
 
 from protocol import ERR_INTERNAL, ERR_INVALID_ARG, ERR_IO, ERR_NOT_CONNECTED, ERR_TIMEOUT
-from riden_daemon import RidenWorker
+from riden_daemon import RidenWorker, discover_devices
 
 log = logging.getLogger("awto.mcp")
 
@@ -86,7 +90,15 @@ def _setup_logging() -> None:
 _setup_logging()
 
 mcp = FastMCP("awto-riden", instructions="""
-Control a Riden RD60xx series power supply (RD6006 / RD6012 / RD6018 / RD6024).
+Control one or more Riden RD60xx series power supplies (RD6006 / RD6012 / RD6018 / RD6024).
+
+FIRST USE — PSU approval flow:
+1. Call rd_list_psus() to see all discovered PSUs.
+2. If any PSU has needs_approval=True, show the list to the user and ask which
+   PSU(s) they want to use (allow) and which to ignore (disallow).
+3. For each approved PSU call rd_connect(psu=NAME) to open the serial port.
+4. Disallowed PSUs simply stay disconnected — no action needed.
+5. Once at least one PSU is connected you can proceed with normal tool calls.
 
 Safety rules:
 - Always call rd_status() first to confirm current state
@@ -111,6 +123,7 @@ CC mode guidance:
 
 _workers: dict[str, RidenWorker] = {}  # name → worker
 _default_psu: str = "default"          # name used when psu arg is omitted
+_auto_discovered: set[str] = set()     # PSU names found via autodiscovery (need user approval)
 
 
 def _resolve(psu: str) -> RidenWorker:
@@ -163,21 +176,72 @@ def _raise_tool_error(op: str, exc: Exception) -> None:
 def rd_list_psus() -> dict[str, Any]:
     """List all registered PSUs, their ports, and connection state.
 
-    Returns a dict of name → {port, baud, address, connected}.
+    Returns a dict of name → {port, baud, address, connected, needs_approval}.
+    PSUs with needs_approval=True were found by autodiscovery but are not yet
+    connected — call rd_connect(psu=NAME) for each one the user approves.
     Use the 'psu' parameter on any other tool to target a specific PSU.
     """
-    return {
-        "psus": {
-            name: {
-                "port":      w._port,
-                "baud":      w._baud,
-                "address":   w._address,
-                "connected": w.is_connected,
-            }
-            for name, w in _workers.items()
-        },
+    psus = {}
+    pending = []
+    for name, w in _workers.items():
+        needs_approval = name in _auto_discovered and not w.is_connected
+        psus[name] = {
+            "port":          w._port,
+            "baud":          w._baud,
+            "address":       w._address,
+            "connected":     w.is_connected,
+            "needs_approval": needs_approval,
+        }
+        if needs_approval:
+            pending.append(name)
+    result: dict[str, Any] = {
+        "psus":    psus,
         "default": _default_psu,
     }
+    if pending:
+        result["action_required"] = (
+            f"The following PSUs were auto-discovered but are not connected. "
+            f"Ask the user which to use, then call rd_connect(psu=NAME) for each approved PSU: "
+            + ", ".join(pending)
+        )
+    return result
+
+
+@mcp.tool()
+def rd_discover_devices(
+    addresses: str = "1,2,3,4,5",
+    baud: int = 115200,
+    timeout_s: float = 0.5,
+    retries: int = 3,
+    ports: str = "",
+    include_errors: bool = False,
+) -> dict[str, Any]:
+    """Discover reachable PSUs across serial ports and Modbus addresses.
+
+    This scan does not require preconfigured PSU names and is intended for
+    plug-and-play discovery when you do not know the active port/address.
+
+    Args:
+        addresses:      Comma-separated addresses to probe (default: "1,2,3,4,5")
+        baud:           Probe baud rate (default: 115200)
+        timeout_s:      Read timeout per probe in seconds (default: 0.5)
+        retries:        Retries per probe (default: 3)
+        ports:          Optional comma-separated ports to scan (default: likely PSU ports ttyUSB/ttyACM/rfcomm)
+        include_errors: Include failed attempts in response (default: False)
+    """
+    try:
+        addr_list = [int(x.strip()) for x in addresses.split(",") if x.strip()]
+        port_list = [x.strip() for x in ports.split(",") if x.strip()] if ports else None
+        return discover_devices(
+            ports=port_list,
+            baud=baud,
+            addresses=addr_list,
+            timeout_s=timeout_s,
+            retries=retries,
+            include_errors=include_errors,
+        )
+    except Exception as e:
+        _raise_tool_error("discover_devices", e)
 
 
 @mcp.tool()
@@ -1056,7 +1120,7 @@ def rd_profile_serial(count: int = 20, sleep_ms: int = 100, psu: str = "default"
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    global _workers, _default_psu
+    global _workers, _default_psu, _auto_discovered
 
     parser = argparse.ArgumentParser(
         description="MCP server for Riden RD60xx power supplies (direct serial, multi-PSU)",
@@ -1106,44 +1170,67 @@ Examples:
     elif args.port:
         psu_specs.append((args.name, args.port, args.baud, args.address))
     else:
-        # Default fallback: score available ports for Riden PSU likelihood
-        # (CH340/341/343 VID/PID > any ttyUSB > ttyACM).
-        default_port, default_baud = find_riden_port(fallback="/dev/ttyUSB0")
-        all_ports = list_serial_ports()
-        if all_ports:
+        # Auto-discover: scan all likely serial ports for Riden PSUs.
+        # Fast probe (timeout=0.3s, retries=2) to keep startup time low.
+        log.info("awto.mcp: no PSU configured — scanning all serial ports for Riden devices...")
+        disc = discover_devices(timeout_s=0.3, retries=2)
+        found = disc.get("found", [])
+
+        if found:
             log.info(
-                "awto.mcp: auto-selected PSU port %s @ %d baud"
-                " (available: %s)",
-                default_port, default_baud,
-                ", ".join(
-                    f"{p['device']}({p['chip'] or 'unknown'})" for p in all_ports
-                ),
+                "awto.mcp: discovered %d PSU(s): %s",
+                len(found),
+                ", ".join(f"{d['model']}@{d['port']}" for d in found),
             )
+            for dev in found:
+                # Auto-name: model-last4ofserial e.g. rk6006-1036
+                suffix = dev["serial"].lstrip("0")[-4:] or dev["serial"][-4:]
+                auto_name = f"{dev['model'].lower()}-{suffix}"
+                # Deduplicate if two PSUs yield the same name
+                base, idx = auto_name, 2
+                while base in {s[0] for s in psu_specs}:
+                    base = f"{auto_name}-{idx}"
+                    idx += 1
+                psu_specs.append((base, dev["port"], dev["baud"], dev["address"]))
+                _auto_discovered.add(base)
         else:
+            # Nothing found — fall back to a single port guess so the server
+            # still starts and the user can investigate.
+            default_port, default_baud = find_riden_port(fallback="/dev/ttyUSB0")
             log.warning(
-                "awto.mcp: no serial devices found; using fallback %s",
+                "awto.mcp: no Riden devices found on any port; "
+                "falling back to %s (may not connect)",
                 default_port,
             )
-
-        psu_specs.append(("default", default_port, default_baud, 1))
+            psu_specs.append(("default", default_port, default_baud, 1))
 
     _default_psu = psu_specs[0][0]
 
     # Open all PSUs
+    # Auto-discovered PSUs start disconnected — user must approve via rd_connect().
     any_ok = False
     for (p_name, p_port, p_baud, p_addr) in psu_specs:
-        try:
-            w = RidenWorker(port=p_port, baud=p_baud, address=p_addr, name=p_name)
-            w.open()
+        w = RidenWorker(port=p_port, baud=p_baud, address=p_addr, name=p_name)
+        if p_name in _auto_discovered:
+            # Registered but not connected — awaiting user approval
             _workers[p_name] = w
-            log.info("awto.mcp: connected to PSU '%s' on %s (baud=%d addr=%d)",
-                     p_name, p_port, p_baud, p_addr)
-            any_ok = True
-        except Exception as e:
-            log.error("failed to open PSU '%s' on %s: %s", p_name, p_port, e)
-            # Register anyway so disconnect/connect tools work
-            w = RidenWorker(port=p_port, baud=p_baud, address=p_addr, name=p_name)
-            _workers[p_name] = w
+            any_ok = True  # we have PSUs to offer
+            log.info(
+                "awto.mcp: registered discovered PSU '%s' on %s "
+                "(disconnected — call rd_connect to activate)",
+                p_name, p_port,
+            )
+        else:
+            try:
+                w.open()
+                _workers[p_name] = w
+                log.info("awto.mcp: connected to PSU '%s' on %s (baud=%d addr=%d)",
+                         p_name, p_port, p_baud, p_addr)
+                any_ok = True
+            except Exception as e:
+                log.error("failed to open PSU '%s' on %s: %s", p_name, p_port, e)
+                # Register anyway so disconnect/connect tools work
+                _workers[p_name] = w
 
     if not any_ok:
         log.error("No PSUs connected — exiting.")

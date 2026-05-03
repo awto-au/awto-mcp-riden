@@ -26,7 +26,7 @@ import colorlog
 import psutil
 
 from riden_register import Register as R
-from riden_transport import SerialTransport, _model_info
+from riden_transport import SerialTransport, _model_info, list_serial_ports
 
 from protocol import (
     DEFAULT_ADDRESS,
@@ -1656,6 +1656,84 @@ class RidenWorker:
                 "last_error":   self._last_error,
                 "serial_profile": self._serial_profile,
             }
+
+
+def discover_devices(
+    ports: list[str] | None = None,
+    baud: int = 115200,
+    addresses: list[int] | None = None,
+    timeout_s: float = 0.5,
+    retries: int = 3,
+    include_errors: bool = False,
+) -> dict[str, Any]:
+    """Discover reachable Riden PSUs across serial ports and Modbus addresses.
+
+    This helper is intentionally outside RidenWorker so CLI/MCP can discover
+    devices before any worker is configured.
+    """
+    if addresses is None or len(addresses) == 0:
+        addresses = [1]
+    addresses = [int(a) for a in addresses if 1 <= int(a) <= 247]
+    if not addresses:
+        raise ValueError("addresses must contain at least one Modbus address in range 1..247")
+
+    if ports is None or len(ports) == 0:
+        # Default to likely external serial adapters only; avoid scanning ttyS*.
+        detected = [p["device"] for p in list_serial_ports() if p.get("device")]
+        likely = [
+            d for d in detected
+            if ("/ttyUSB" in d or "/ttyACM" in d or "/rfcomm" in d)
+        ]
+        ports = likely if likely else detected
+
+    found: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+
+    for port in ports:
+        for addr in addresses:
+            tr = SerialTransport(
+                port=port,
+                baud=baud,
+                address=addr,
+                retries=max(1, int(retries)),
+                timeout=float(timeout_s),
+            )
+            try:
+                tr.open()
+                psu = RidenDevice(tr)
+                fw_raw = int(getattr(psu, "fw", 0))
+                found.append({
+                    "port": port,
+                    "baud": int(baud),
+                    "address": int(addr),
+                    "model": getattr(psu, "type", "unknown"),
+                    "device_id": int(getattr(psu, "id", 0)),
+                    "serial": str(getattr(psu, "sn", "")),
+                    "fw_raw": fw_raw,
+                    "fw": f"v{fw_raw // 100}.{fw_raw % 100:02d}",
+                })
+            except Exception as exc:
+                if include_errors:
+                    errors.append({
+                        "port": port,
+                        "baud": int(baud),
+                        "address": int(addr),
+                        "error": str(exc),
+                    })
+            finally:
+                try:
+                    tr.close()
+                except Exception:
+                    pass
+
+    return {
+        "ports_scanned": ports,
+        "baud": int(baud),
+        "addresses_scanned": addresses,
+        "found": found,
+        "found_count": len(found),
+        "errors": errors if include_errors else [],
+    }
 
     def _usb_topology_info(self) -> dict[str, Any]:
         """Best-effort USB topology details for /dev/ttyUSB* devices."""

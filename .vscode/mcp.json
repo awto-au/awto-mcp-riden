@@ -4,11 +4,7 @@
       "type": "stdio",
       "command": "${workspaceFolder}/.venv/bin/python",
       "args": [
-        "${workspaceFolder}/mcp_server.py",
-        "--baud",
-        "115200",
-        "--address",
-        "1"
+        "${workspaceFolder}/mcp_server.py"
       ]
     }
   }

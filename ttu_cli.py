@@ -19,7 +19,7 @@ import colorlog
 from rich_argparse import RichHelpFormatter
 
 from protocol import ERR_INTERNAL, ERR_INVALID_ARG, ERR_IO, ERR_NOT_CONNECTED, ERR_TIMEOUT
-from riden_daemon import RidenWorker
+from riden_daemon import RidenWorker, discover_devices
 
 log = logging.getLogger("awto.cli")
 
@@ -164,6 +164,36 @@ def main() -> None:
     _F = RichHelpFormatter
 
     sub.add_parser("ping", help="health-check the PSU", formatter_class=_F)
+    sp_discover = sub.add_parser("discover", help="discover PSUs across serial ports and addresses", formatter_class=_F)
+    sp_discover.add_argument(
+        "--addresses",
+        default="1,2,3,4,5",
+        help="comma-separated Modbus addresses to probe (default: 1,2,3,4,5)",
+    )
+    sp_discover.add_argument(
+        "--ports",
+        default="",
+        help="optional comma-separated serial ports to probe (default: likely PSU ports ttyUSB/ttyACM/rfcomm)",
+    )
+    sp_discover.add_argument(
+        "--timeout",
+        type=float,
+        default=0.5,
+        metavar="S",
+        help="read timeout per probe in seconds (default: 0.5)",
+    )
+    sp_discover.add_argument(
+        "--retries",
+        type=int,
+        default=3,
+        metavar="N",
+        help="retries per probe (default: 3)",
+    )
+    sp_discover.add_argument(
+        "--include-errors",
+        action="store_true",
+        help="include failed probe attempts in output",
+    )
     sub.add_parser("capabilities", help="show API capabilities and error codes", formatter_class=_F)
     sub.add_parser("status", help="show current PSU state", formatter_class=_F)
     sub.add_parser("info", help="show PSU process health", formatter_class=_F)
@@ -300,7 +330,7 @@ def main() -> None:
 
     _setup_logging(args.verbose)
 
-    # The 'plot' subcommand is offline — no PSU connection needed.
+    # Offline subcommands — no fixed PSU connection needed.
     if args.subcmd == "plot":
         import sys as _sys
         from pathlib import Path as _Path
@@ -314,6 +344,19 @@ def main() -> None:
             print(f"Saved: {_out}")
             saved.append(str(_out))
         print(json.dumps({"ok": True, "saved": saved}, indent=2))
+        return
+    if args.subcmd == "discover":
+        addresses = [int(x.strip()) for x in args.addresses.split(",") if x.strip()]
+        ports = [x.strip() for x in args.ports.split(",") if x.strip()] if args.ports else None
+        result = discover_devices(
+            ports=ports,
+            baud=args.baud,
+            addresses=addresses,
+            timeout_s=args.timeout,
+            retries=args.retries,
+            include_errors=args.include_errors,
+        )
+        print(json.dumps(result, indent=2))
         return
 
     # Open serial connection
