@@ -1362,6 +1362,87 @@ class RidenWorker:
 
         return self._execute("modbus_write_register", _run)
 
+    def register_scan(
+        self,
+        start: int = 0,
+        end: int = 300,
+        batch: int = 50,
+        skip_zero: bool = False,
+    ) -> dict[str, Any]:
+        """Scan a register range in batches and annotate each address.
+
+        Reads registers [start, end) in chunks of *batch* registers (max 125).
+        Each register is annotated with its known name from Register (or
+        'unknown' if undocumented).  Registers that respond with an exception
+        frame (error) are flagged separately.
+
+        Args:
+            start:     First register address (default 0).
+            end:       One past the last address to scan (default 300).
+            batch:     Registers per read request, 1–125 (default 50).
+            skip_zero: If True, omit registers whose value is 0x0000 from
+                       the 'registers' list (still counted in zeros_skipped).
+        """
+        import time as _time
+        from riden_register import Register as _Reg
+
+        # Build address→name lookup once
+        _known: dict[int, str] = {
+            v: k for k, v in vars(_Reg).items()
+            if not k.startswith("_") and isinstance(v, int)
+            and k not in ("BOOTLOADER",)   # BOOTLOADER is a magic value, not an address
+        }
+
+        if start < 0 or end > 0xFFFF or start >= end:
+            raise ValueError("start/end out of range")
+        batch = max(1, min(125, batch))
+
+        results: list[dict] = []
+        errors: list[dict] = []
+        zeros_skipped = 0
+
+        addr = start
+        while addr < end:
+            chunk = min(batch, end - addr)
+            try:
+                with self._lock:
+                    psu = self._assert_connected()
+                    raw = psu.read(addr, chunk)
+                if chunk == 1:
+                    raw = (raw,) if not isinstance(raw, (list, tuple)) else raw
+                for i, val in enumerate(raw):
+                    reg_addr = addr + i
+                    val = int(val)
+                    if skip_zero and val == 0:
+                        zeros_skipped += 1
+                        continue
+                    results.append({
+                        "addr": reg_addr,
+                        "name": _known.get(reg_addr, "unknown"),
+                        "value": val,
+                        "hex": f"0x{val:04X}",
+                        "known": reg_addr in _known,
+                    })
+            except Exception as exc:
+                errors.append({"addr": addr, "chunk": chunk, "error": str(exc)})
+            addr += chunk
+            _time.sleep(0.05)   # brief pause between chunks — be polite to firmware
+
+        unknowns = [r for r in results if not r["known"] and r["value"] != 0]
+        return {
+            "start": start,
+            "end": end,
+            "batch": batch,
+            "skip_zero": skip_zero,
+            "total_registers": end - start,
+            "read_ok": len(results) + zeros_skipped,
+            "zeros_skipped": zeros_skipped,
+            "errors": errors,
+            "registers": results,
+            "unknown_nonzero": unknowns,
+            "unknown_nonzero_count": len(unknowns),
+        }
+
     def capabilities(self) -> dict[str, Any]:
         with self._lock:
             psu = self._assert_connected()
@@ -1385,6 +1466,7 @@ class RidenWorker:
                 "beep",
                 "modbus_read_holding",
                 "modbus_write_register",
+                "register_scan",
                 "profile_serial",
                 "info",
             ],

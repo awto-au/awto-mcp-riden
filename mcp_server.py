@@ -956,6 +956,38 @@ def rd_modbus_write_register(
 
 
 @mcp.tool()
+def rd_register_scan(
+    start: int = 0,
+    end: int = 300,
+    batch: int = 50,
+    skip_zero: bool = True,
+    psu: str = "default",
+) -> dict[str, Any]:
+    """Scan a Modbus register range and annotate known/unknown addresses.
+
+    Reads registers [start, end) in batches and cross-references the known
+    Riden register map.  Highlights undocumented registers that hold non-zero
+    values — useful for discovering firmware-specific hidden registers.
+
+    The default range (0–300) covers all documented registers plus the gap
+    to SYSTEM (256) and a safety margin.
+
+    Args:
+        start:     First register address (default 0).
+        end:       One past the last address to scan (default 300).
+        batch:     Registers per read request, 1–125 (default 50).
+        skip_zero: Omit registers whose value is 0 from the full list
+                   (unknown_nonzero always shows undocumented non-zero hits).
+                   Default True to keep output concise.
+        psu:       PSU name (default: the default PSU).
+    """
+    try:
+        return _ensure_connected(psu).register_scan(start, end, batch, skip_zero)
+    except Exception as e:
+        _raise_tool_error("register_scan", e)
+
+
+@mcp.tool()
 def rd_daemon_info(psu: str = "default") -> dict[str, Any]:
     """Get process health: PID, memory, CPU, threads, etc.
 

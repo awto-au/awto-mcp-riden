@@ -5,8 +5,6 @@
       "command": "${workspaceFolder}/.venv/bin/python",
       "args": [
         "${workspaceFolder}/mcp_server.py",
-        "--port",
-        "/dev/ttyUSB0",
         "--baud",
         "115200",
         "--address",
